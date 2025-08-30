@@ -1,0 +1,542 @@
+<!DOCTYPE html>
+<html lang=zh>
+<head>
+    <!-- so meta -->
+    <meta charset="utf-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="HandheldFriendly" content="True">
+    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=5" />
+    <meta name="description" content="最近开始慢慢接触到代码优化的问题，自然而然就了解到了go语言自带的pprof工具，说实话已经闻名已久，前几天也实际上手使用了一下，但也只是跟着网上的教程在代码中进行了简单的嵌入，没有理解太深刻，所以这次记录一下，加深印象也方便以后自己使用。 简介首先呢go中有两个监控性能的pprof包：  runtime&#x2F;pprof：采集程序运行数据进行性能分析，一般用于后台工具型应用，这种应用运行一段">
+<meta property="og:type" content="article">
+<meta property="og:title" content="pprof到底怎么用？">
+<meta property="og:url" content="https://0xccio.github.io/2025/08/30/pprof%E5%88%B0%E5%BA%95%E6%80%8E%E4%B9%88%E7%94%A8%EF%BC%9F/index.html">
+<meta property="og:site_name" content="cc">
+<meta property="og:description" content="最近开始慢慢接触到代码优化的问题，自然而然就了解到了go语言自带的pprof工具，说实话已经闻名已久，前几天也实际上手使用了一下，但也只是跟着网上的教程在代码中进行了简单的嵌入，没有理解太深刻，所以这次记录一下，加深印象也方便以后自己使用。 简介首先呢go中有两个监控性能的pprof包：  runtime&#x2F;pprof：采集程序运行数据进行性能分析，一般用于后台工具型应用，这种应用运行一段">
+<meta property="og:locale" content="zh_CN">
+<meta property="article:published_time" content="2025-08-30T10:57:32.000Z">
+<meta property="article:modified_time" content="2025-08-30T11:16:29.442Z">
+<meta property="article:author" content="0xccio">
+<meta property="article:tag" content="pprof">
+<meta name="twitter:card" content="summary">
+    
+    
+      
+        
+          <link rel="shortcut icon" href="/images/favicon.ico">
+        
+      
+      
+        
+          <link rel="icon" type="image/png" href="/images/favicon-192x192.png" sizes="192x192">
+        
+      
+      
+        
+          <link rel="apple-touch-icon" sizes="180x180" href="/images/apple-touch-icon.png">
+        
+      
+    
+    <!-- title -->
+    <title>pprof到底怎么用？</title>
+    <!-- async scripts -->
+    <!-- Google Analytics -->
+
+
+    <!-- Umami Analytics -->
+
+
+    <!-- styles -->
+    
+<link rel="stylesheet" href="/css/style.css">
+
+    <!-- persian styles -->
+    
+    <!-- rss -->
+    
+    
+	<!-- mathjax -->
+	
+<meta name="generator" content="Hexo 7.3.0"></head>
+
+<body class="max-width mx-auto px3 ltr">
+    
+      <div id="header-post">
+  <a id="menu-icon" href="#" aria-label="目录"><i class="fa-solid fa-bars fa-lg"></i></a>
+  <a id="menu-icon-tablet" href="#" aria-label="目录"><i class="fa-solid fa-bars fa-lg"></i></a>
+  <a id="top-icon-tablet" href="#" aria-label="顶部" onclick="$('html, body').animate({ scrollTop: 0 }, 'fast');" style="display:none;"><i class="fa-solid fa-chevron-up fa-lg"></i></a>
+  <span id="menu">
+    <span id="nav">
+      <ul>
+        <!--
+       --><li><a href="/">首页</a></li><!--
+     --><!--
+       --><li><a href="/about/">关于</a></li><!--
+     --><!--
+       --><li><a href="/archives/">文章</a></li><!--
+     --><!--
+       --><li><a target="_blank" rel="noopener" href="https://github.com/0xccio">项目</a></li><!--
+     -->
+      </ul>
+    </span>
+    <br/>
+    <span id="actions">
+      <ul>
+        
+        
+        <li><a class="icon" aria-label="下一篇" href="/2025/05/24/hello-world/"><i class="fa-solid fa-chevron-right" aria-hidden="true" onmouseover="$('#i-next').toggle();" onmouseout="$('#i-next').toggle();"></i></a></li>
+        
+        <li><a class="icon" aria-label="返回顶部" href="#" onclick="$('html, body').animate({ scrollTop: 0 }, 'fast');"><i class="fa-solid fa-chevron-up" aria-hidden="true" onmouseover="$('#i-top').toggle();" onmouseout="$('#i-top').toggle();"></i></a></li>
+        <li><a class="icon" aria-label="分享文章" href="#"><i class="fa-solid fa-share-alt" aria-hidden="true" onmouseover="$('#i-share').toggle();" onmouseout="$('#i-share').toggle();" onclick="$('#share').toggle();return false;"></i></a></li>
+      </ul>
+      <span id="i-prev" class="info" style="display:none;">上一篇</span>
+      <span id="i-next" class="info" style="display:none;">下一篇</span>
+      <span id="i-top" class="info" style="display:none;">返回顶部</span>
+      <span id="i-share" class="info" style="display:none;">分享文章</span>
+    </span>
+    <br/>
+    <div id="share" style="display: none">
+      <ul>
+  <li><a class="icon" target="_blank" rel="noopener" href="http://www.facebook.com/sharer.php?u=https://0xccio.github.io/2025/08/30/pprof%E5%88%B0%E5%BA%95%E6%80%8E%E4%B9%88%E7%94%A8%EF%BC%9F/"><i class="fab fa-facebook " aria-hidden="true"></i></a></li>
+  <li><a class="icon" target="_blank" rel="noopener" href="https://twitter.com/share?url=https://0xccio.github.io/2025/08/30/pprof%E5%88%B0%E5%BA%95%E6%80%8E%E4%B9%88%E7%94%A8%EF%BC%9F/&text=pprof到底怎么用？"><i class="fab fa-twitter " aria-hidden="true"></i></a></li>
+  <li><a class="icon" target="_blank" rel="noopener" href="http://www.linkedin.com/shareArticle?url=https://0xccio.github.io/2025/08/30/pprof%E5%88%B0%E5%BA%95%E6%80%8E%E4%B9%88%E7%94%A8%EF%BC%9F/&title=pprof到底怎么用？"><i class="fab fa-linkedin " aria-hidden="true"></i></a></li>
+  <li><a class="icon" target="_blank" rel="noopener" href="https://pinterest.com/pin/create/bookmarklet/?url=https://0xccio.github.io/2025/08/30/pprof%E5%88%B0%E5%BA%95%E6%80%8E%E4%B9%88%E7%94%A8%EF%BC%9F/&is_video=false&description=pprof到底怎么用？"><i class="fab fa-pinterest " aria-hidden="true"></i></a></li>
+  <li><a class="icon" href="mailto:?subject=pprof到底怎么用？&body=Check out this article: https://0xccio.github.io/2025/08/30/pprof%E5%88%B0%E5%BA%95%E6%80%8E%E4%B9%88%E7%94%A8%EF%BC%9F/"><i class="fa-solid fa-envelope " aria-hidden="true"></i></a></li>
+  <li><a class="icon" target="_blank" rel="noopener" href="https://getpocket.com/save?url=https://0xccio.github.io/2025/08/30/pprof%E5%88%B0%E5%BA%95%E6%80%8E%E4%B9%88%E7%94%A8%EF%BC%9F/&title=pprof到底怎么用？"><i class="fab fa-get-pocket " aria-hidden="true"></i></a></li>
+  <li><a class="icon" target="_blank" rel="noopener" href="http://reddit.com/submit?url=https://0xccio.github.io/2025/08/30/pprof%E5%88%B0%E5%BA%95%E6%80%8E%E4%B9%88%E7%94%A8%EF%BC%9F/&title=pprof到底怎么用？"><i class="fab fa-reddit " aria-hidden="true"></i></a></li>
+  <li><a class="icon" target="_blank" rel="noopener" href="http://www.stumbleupon.com/submit?url=https://0xccio.github.io/2025/08/30/pprof%E5%88%B0%E5%BA%95%E6%80%8E%E4%B9%88%E7%94%A8%EF%BC%9F/&title=pprof到底怎么用？"><i class="fab fa-stumbleupon " aria-hidden="true"></i></a></li>
+  <li><a class="icon" target="_blank" rel="noopener" href="http://digg.com/submit?url=https://0xccio.github.io/2025/08/30/pprof%E5%88%B0%E5%BA%95%E6%80%8E%E4%B9%88%E7%94%A8%EF%BC%9F/&title=pprof到底怎么用？"><i class="fab fa-digg " aria-hidden="true"></i></a></li>
+  <li><a class="icon" target="_blank" rel="noopener" href="http://www.tumblr.com/share/link?url=https://0xccio.github.io/2025/08/30/pprof%E5%88%B0%E5%BA%95%E6%80%8E%E4%B9%88%E7%94%A8%EF%BC%9F/&name=pprof到底怎么用？&description="><i class="fab fa-tumblr " aria-hidden="true"></i></a></li>
+  <li><a class="icon" target="_blank" rel="noopener" href="https://news.ycombinator.com/submitlink?u=https://0xccio.github.io/2025/08/30/pprof%E5%88%B0%E5%BA%95%E6%80%8E%E4%B9%88%E7%94%A8%EF%BC%9F/&t=pprof到底怎么用？"><i class="fab fa-hacker-news " aria-hidden="true"></i></a></li>
+</ul>
+
+    </div>
+    
+    
+      <div id="toc">
+        <ol class="toc"><li class="toc-item toc-level-2"><a class="toc-link"><span class="toc-number">1.</span> <span class="toc-text">简介</span></a></li><li class="toc-item toc-level-2"><a class="toc-link"><span class="toc-number">2.</span> <span class="toc-text">pprof默认接口</span></a></li><li class="toc-item toc-level-2"><a class="toc-link"><span class="toc-number">3.</span> <span class="toc-text">pprof不同模式的使用</span></a><ol class="toc-child"><li class="toc-item toc-level-3"><a class="toc-link"><span class="toc-number">3.1.</span> <span class="toc-text">1.交互模式</span></a></li><li class="toc-item toc-level-3"><a class="toc-link"><span class="toc-number">3.2.</span> <span class="toc-text">2.非交互模式</span></a></li><li class="toc-item toc-level-3"><a class="toc-link"><span class="toc-number">3.3.</span> <span class="toc-text">3.Web模式</span></a></li></ol></li><li class="toc-item toc-level-2"><a class="toc-link"><span class="toc-number">4.</span> <span class="toc-text">runtime&#x2F;pprof</span></a><ol class="toc-child"><li class="toc-item toc-level-3"><a class="toc-link"><span class="toc-number">4.1.</span> <span class="toc-text">适用场景</span></a></li><li class="toc-item toc-level-3"><a class="toc-link"><span class="toc-number">4.2.</span> <span class="toc-text">常用函数</span></a><ol class="toc-child"><li class="toc-item toc-level-4"><a class="toc-link"><span class="toc-number">4.2.1.</span> <span class="toc-text">1. CPU 性能</span></a></li><li class="toc-item toc-level-4"><a class="toc-link"><span class="toc-number">4.2.2.</span> <span class="toc-text">2. 内存堆信息</span></a></li><li class="toc-item toc-level-4"><a class="toc-link"><span class="toc-number">4.2.3.</span> <span class="toc-text">3.获取特定类型的分析数据</span></a></li></ol></li></ol></li><li class="toc-item toc-level-2"><a class="toc-link"><span class="toc-number">5.</span> <span class="toc-text">net&#x2F;http&#x2F;pprof</span></a><ol class="toc-child"><li class="toc-item toc-level-3"><a class="toc-link"><span class="toc-number">5.1.</span> <span class="toc-text">适用场景</span></a></li><li class="toc-item toc-level-3"><a class="toc-link"><span class="toc-number">5.2.</span> <span class="toc-text">集成步骤</span></a></li></ol></li><li class="toc-item toc-level-2"><a class="toc-link"><span class="toc-number">6.</span> <span class="toc-text">github.com&#x2F;gin-contrib&#x2F;pprof</span></a><ol class="toc-child"><li class="toc-item toc-level-3"><a class="toc-link"><span class="toc-number">6.1.</span> <span class="toc-text">适用场景:</span></a></li><li class="toc-item toc-level-3"><a class="toc-link"><span class="toc-number">6.2.</span> <span class="toc-text">集成步骤：</span></a><ol class="toc-child"><li class="toc-item toc-level-4"><a class="toc-link"><span class="toc-number">6.2.1.</span> <span class="toc-text">1.下载依赖</span></a></li><li class="toc-item toc-level-4"><a class="toc-link"><span class="toc-number">6.2.2.</span> <span class="toc-text">2.在代码中导入这个库</span></a></li><li class="toc-item toc-level-4"><a class="toc-link"><span class="toc-number">6.2.3.</span> <span class="toc-text">3.初始化pprof中间件</span></a></li><li class="toc-item toc-level-4"><a class="toc-link"><span class="toc-number">6.2.4.</span> <span class="toc-text">4.一些进阶使用</span></a><ol class="toc-child"><li class="toc-item toc-level-5"><a class="toc-link"><span class="toc-number">6.2.4.1.</span> <span class="toc-text">更改 pprof 默认路径前缀</span></a></li><li class="toc-item toc-level-5"><a class="toc-link"><span class="toc-number">6.2.4.2.</span> <span class="toc-text">使用自定义路由组</span></a></li></ol></li></ol></li></ol></li></ol>
+      </div>
+    
+  </span>
+</div>
+
+    
+    <div class="content index py4 ">
+        
+        <article class="post h-entry" itemscope itemtype="http://schema.org/BlogPosting">
+  <header>
+    
+    <h1 class="posttitle p-name" itemprop="name headline">
+        pprof到底怎么用？
+    </h1>
+
+
+
+    <div class="meta">
+      <span class="author p-author h-card" itemprop="author" itemscope itemtype="http://schema.org/Person">
+        <span class="p-name" itemprop="name">0xccio</span>
+      </span>
+      
+    <div class="postdate">
+      
+        <time datetime="2025-08-30T10:57:32.000Z" class="dt-published" itemprop="datePublished">2025-08-30</time>
+        
+      
+    </div>
+
+
+      
+
+      
+    <div class="article-tag">
+        <i class="fa-solid fa-tag"></i>
+        <a class="p-category" href="/tags/pprof/" rel="tag">pprof</a>
+    </div>
+
+
+    </div>
+  </header>
+  
+
+  <div class="content e-content" itemprop="articleBody">
+    <p>最近开始慢慢接触到代码优化的问题，自然而然就了解到了go语言自带的pprof工具，说实话已经闻名已久，前几天也实际上手使用了一下，但也只是跟着网上的教程在代码中进行了简单的嵌入，没有理解太深刻，所以这次记录一下，加深印象也方便以后自己使用。</p>
+<h2><span id="简介">简介</span></h2><p>首先呢go中有两个监控性能的pprof包：</p>
+<ul>
+<li><p><a target="_blank" rel="noopener" href="https://golang.org/pkg/runtime/pprof/">runtime&#x2F;pprof</a>：采集程序运行数据进行性能分析，一般用于后台工具型应用，这种应用运行一段时间就结束。</p>
+</li>
+<li><p><a target="_blank" rel="noopener" href="https://golang.org/pkg/net/http/pprof/">net&#x2F;http&#x2F;pprof</a>：对 runtime&#x2F;pprof 的二次封装，一般是服务型应用。比如 web server ，它一直运行。这个包对提供的 http 服务进行数据采集分析。</p>
+</li>
+</ul>
+<p>那么问题来了，我们到底该怎么使用这个工具对我们的代码进行监控分析并且能生成文本或图形报告呢？</p>
+<p>答案是一个命令行工具：</p>
+<figure class="highlight bash"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">go tool pprof</span><br></pre></td></tr></table></figure>
+
+<p>这个命令行有什么作用又如何使用，我觉得应该在后面解释，这里更应该先了解一下pprof默认的一些接口</p>
+<h2><span id="pprof默认接口">pprof默认接口</span></h2><table>
+<thead>
+<tr>
+<th>接口地址</th>
+<th>说明</th>
+<th>特点</th>
+<th>适用场景</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>/debug/pprof</code></td>
+<td>默认路径，访问其他接口的基础路径</td>
+<td>无需进一步指定路径</td>
+<td>查看默认的所有性能数据接口</td>
+</tr>
+<tr>
+<td><code>/debug/pprof/profile</code></td>
+<td><strong>CPU Profiling</strong></td>
+<td>默认采样 30 秒（可通过 <code>?seconds=N</code> 指定时长），<strong>只能采样一段时间</strong></td>
+<td>分析一段时间内 CPU 占用情况，找出热点函数</td>
+</tr>
+<tr>
+<td><code>/debug/pprof/heap</code></td>
+<td><strong>内存快照</strong></td>
+<td>立即返回一次内存使用快照，可以多次访问获取不同时间点的数据</td>
+<td>分析内存分配、GC、内存泄漏</td>
+</tr>
+<tr>
+<td><code>/debug/pprof/goroutine</code></td>
+<td><strong>Goroutine 堆栈</strong></td>
+<td>立即返回所有 goroutine 的调用堆栈</td>
+<td>排查 goroutine 泄漏、死锁、阻塞</td>
+</tr>
+<tr>
+<td><code>/debug/pprof/block</code></td>
+<td><strong>阻塞 Profiling</strong></td>
+<td>需要在代码中设置 <code>runtime.SetBlockProfileRate</code> 才会生效，立即返回</td>
+<td>分析锁竞争、阻塞点</td>
+</tr>
+<tr>
+<td><code>/debug/pprof/mutex</code></td>
+<td><strong>锁竞争 Profiling</strong></td>
+<td>需要设置 <code>runtime.SetMutexProfileFraction</code>，立即返回</td>
+<td>分析锁冲突、性能瓶颈</td>
+</tr>
+<tr>
+<td><code>/debug/pprof/threadcreate</code></td>
+<td><strong>线程创建情况</strong></td>
+<td>立即返回</td>
+<td>检查线程数量异常增长问题</td>
+</tr>
+</tbody></table>
+<p>可以看到我们可以通过不同的命令去查看cpu，内存，goroutine等关键代码指标。</p>
+<p>那接下来介绍如何上手使用<code>go tool pprof</code>这个命令</p>
+<h2><span id="pprof不同模式的使用">pprof不同模式的使用</span></h2><h3><span id="1交互模式">1.交互模式</span></h3><p>交互模式是最常用的方式，它能够提供一个交互式的界面，让我们能够通过不同的命令来查看和分析 pprof 文件的内容。</p>
+<p><strong>步骤：</strong></p>
+<ul>
+<li><p>在代码中嵌入pprof工具后，启动程序就会生成对应的<code>.prof</code>文件</p>
+</li>
+<li><p>此时使用如下命令：</p>
+<figure class="highlight bash"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">go tool pprof cpu.prof</span><br></pre></td></tr></table></figure></li>
+</ul>
+<p>        就可以进入到交互模式，而在交互模式下，我们需要记住以下常用命令：</p>
+<p>        <strong>top</strong>：查看最耗时的函数。</p>
+<p>        <strong>list</strong> ：查看某个函数的源码和每行代码的耗时。</p>
+<p>        <strong>web</strong>：生成图形化的调用图（需要安装 Graphviz）。</p>
+<p>        <strong>png &#x2F; pdf &#x2F; svg</strong>：导出图像或 PDF 格式的分析结果。</p>
+<p>        <strong>quit</strong>：退出交互模式。</p>
+<h3><span id="2非交互模式">2.非交互模式</span></h3><p>非交互模式是另一种常用的方式，它允许我们一次性输出分析结果，而不进入交互界面。适用于需要快速查看性能分析数据或在 CI 环境中自动化处理的场景。</p>
+<p><strong>步骤：</strong></p>
+<ul>
+<li><p>同样需要先生成<code>.prof</code>文件</p>
+</li>
+<li><p>直接使用<code>go tool pprof</code> 输出分析结果：</p>
+<figure class="highlight bash"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br></pre></td><td class="code"><pre><span class="line"><span class="comment"># 打印出最耗时的函数</span></span><br><span class="line">go tool pprof -top cpu.prof</span><br><span class="line"></span><br><span class="line"><span class="comment"># 导出为 PNG 格式的调用图</span></span><br><span class="line">go tool pprof -png cpu.prof &gt; cpu.png</span><br><span class="line"></span><br><span class="line"><span class="comment"># 导出为 PDF 格式</span></span><br><span class="line">go tool pprof -pdf cpu.prof &gt; cpu.pdf</span><br></pre></td></tr></table></figure></li>
+</ul>
+<h3><span id="3web模式">3.Web模式</span></h3><p>除了交互模式和非交互模式，<code>go tool pprof</code> 还可以通过启动本地 Web 服务来查看 pprof 数据。使用 <code>-http</code> 标志，启动一个 HTTP 服务来查看 pprof 数据。</p>
+<p><strong>步骤：</strong></p>
+<figure class="highlight bash"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">go tool pprof -http=:8081 cpu.prof</span><br></pre></td></tr></table></figure>
+
+<p>然后我们就可以通过浏览器访问 <code>http://localhost:8081</code> 来查看性能分析的结果。</p>
+<p>有关这个命令行工具的介绍就到这里，接下来我们仔细看看不同的场景如何去使用pprof</p>
+<h2><span id="runtimex2fpprof">runtime&#x2F;pprof</span></h2><h3><span id="适用场景">适用场景</span></h3><ul>
+<li><p><strong>命令行&#x2F;批处理型程序</strong>（一次跑完就退出），没有常驻 HTTP 服务。</p>
+</li>
+<li><p>只想在<strong>某一段关键代码</strong>前后手动开始&#x2F;停止采样，控制更精细。</p>
+</li>
+<li><p>需要把 <code>.prof</code> 文件落盘，便于离线带回分析。</p>
+</li>
+</ul>
+<p>示例代码：</p>
+<figure class="highlight go"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br><span class="line">35</span><br><span class="line">36</span><br><span class="line">37</span><br><span class="line">38</span><br><span class="line">39</span><br><span class="line">40</span><br><span class="line">41</span><br><span class="line">42</span><br><span class="line">43</span><br><span class="line">44</span><br><span class="line">45</span><br><span class="line">46</span><br><span class="line">47</span><br><span class="line">48</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">package</span> main</span><br><span class="line"></span><br><span class="line"><span class="keyword">import</span> (</span><br><span class="line">    <span class="string">&quot;log&quot;</span></span><br><span class="line">    <span class="string">&quot;os&quot;</span></span><br><span class="line">    <span class="string">&quot;runtime&quot;</span></span><br><span class="line">    <span class="string">&quot;runtime/pprof&quot;</span></span><br><span class="line">    <span class="string">&quot;time&quot;</span></span><br><span class="line">)</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="keyword">func</span> <span class="title">heavyWork</span><span class="params">()</span></span> &#123;</span><br><span class="line">    <span class="comment">// 模拟业务</span></span><br><span class="line">    buf := <span class="built_in">make</span>([]<span class="type">byte</span>, <span class="number">0</span>, <span class="number">1</span>&lt;&lt;<span class="number">20</span>)</span><br><span class="line">    <span class="keyword">for</span> i := <span class="number">0</span>; i &lt; <span class="number">50000000</span>; i++ &#123;</span><br><span class="line">        buf = <span class="built_in">append</span>(buf, <span class="type">byte</span>(i))</span><br><span class="line">    &#125;</span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="keyword">func</span> <span class="title">main</span><span class="params">()</span></span> &#123;</span><br><span class="line">    <span class="comment">// 1) CPU profile：开始 -&gt; 结束</span></span><br><span class="line">    cpuFile, err := os.Create(<span class="string">&quot;cpu.prof&quot;</span>)</span><br><span class="line">    <span class="keyword">if</span> err != <span class="literal">nil</span> &#123;</span><br><span class="line">        log.Fatal(err)</span><br><span class="line">    &#125;</span><br><span class="line">    <span class="keyword">if</span> err := pprof.StartCPUProfile(cpuFile); err != <span class="literal">nil</span> &#123;</span><br><span class="line">        log.Fatal(err)</span><br><span class="line">    &#125;</span><br><span class="line">    <span class="keyword">defer</span> <span class="function"><span class="keyword">func</span><span class="params">()</span></span> &#123;</span><br><span class="line">        pprof.StopCPUProfile() <span class="comment">// 一定要停止，否则文件不完整</span></span><br><span class="line">        _ = cpuFile.Close()</span><br><span class="line">    &#125;()</span><br><span class="line"></span><br><span class="line">    <span class="comment">// 2) 跑你的关键负载（只包住你想分析的范围）</span></span><br><span class="line">    heavyWork()</span><br><span class="line">    time.Sleep(<span class="number">2</span> * time.Second)</span><br><span class="line">    heavyWork()</span><br><span class="line"></span><br><span class="line">    <span class="comment">// 3) Heap profile：退出前抓一次</span></span><br><span class="line">    heapFile, err := os.Create(<span class="string">&quot;heap.prof&quot;</span>)</span><br><span class="line">    <span class="keyword">if</span> err != <span class="literal">nil</span> &#123;</span><br><span class="line">        log.Fatal(err)</span><br><span class="line">    &#125;</span><br><span class="line">    <span class="keyword">defer</span> heapFile.Close()</span><br><span class="line">    runtime.GC() <span class="comment">// 建议先触发一次 GC，让活跃内存更“干净”</span></span><br><span class="line">    <span class="keyword">if</span> err := pprof.WriteHeapProfile(heapFile); err != <span class="literal">nil</span> &#123;</span><br><span class="line">        log.Fatal(err)</span><br><span class="line">    &#125;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<p>运行程序后，我们就会在项目目录下看到生成的两个文件：<code>cpu.prof</code>和<code>heap.prof</code></p>
+<p>现在就可以通过上文讲到的三种模式，选择自己喜欢的方式去查看cpu和内存的相关信息了。</p>
+<h3><span id="常用函数">常用函数</span></h3><h4><span id="1-cpu-性能">1. CPU 性能</span></h4><p>此函数开始 CPU 性能分析，并将结果写入指定文件中。</p>
+<p><strong>使用示例</strong>：</p>
+<figure class="highlight go"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br></pre></td><td class="code"><pre><span class="line">cpuFile, err := os.Create(<span class="string">&quot;cpu.prof&quot;</span>)</span><br><span class="line"><span class="keyword">if</span> err != <span class="literal">nil</span> &#123;</span><br><span class="line">    log.Fatal(err)</span><br><span class="line">&#125;</span><br><span class="line">err = pprof.StartCPUProfile(cpuFile)</span><br><span class="line"><span class="keyword">if</span> err != <span class="literal">nil</span> &#123;</span><br><span class="line">    log.Fatal(err)</span><br><span class="line">&#125;</span><br><span class="line"><span class="keyword">defer</span> pprof.StopCPUProfile() <span class="comment">// 在应用程序完成时停止 CPU 分析</span></span><br></pre></td></tr></table></figure>
+
+<h4><span id="2-内存堆信息">2. 内存堆信息</span></h4><p>此函数用于输出当前程序的内存堆信息，帮助开发者查看程序的内存分配。</p>
+<p><strong>使用示例</strong>：</p>
+<figure class="highlight go"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br></pre></td><td class="code"><pre><span class="line">heapFile, err := os.Create(<span class="string">&quot;heap.prof&quot;</span>)</span><br><span class="line"><span class="keyword">if</span> err != <span class="literal">nil</span> &#123;</span><br><span class="line">    log.Fatal(err)</span><br><span class="line">&#125;</span><br><span class="line"><span class="keyword">defer</span> heapFile.Close()</span><br><span class="line">runtime.GC()  <span class="comment">// 提前触发 GC，确保内存分配信息清晰</span></span><br><span class="line">err = pprof.WriteHeapProfile(heapFile)</span><br><span class="line"><span class="keyword">if</span> err != <span class="literal">nil</span> &#123;</span><br><span class="line">    log.Fatal(err)</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<h4><span id="3获取特定类型的分析数据">3.获取特定类型的分析数据</span></h4><p><code>Lookup</code>函数返回特定类型的数据分析器，如 CPU、堆、goroutine 等。</p>
+<p><strong>使用示例</strong>：</p>
+<figure class="highlight go"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br></pre></td><td class="code"><pre><span class="line"><span class="comment">// 所有 goroutine 的详细调用栈。</span></span><br><span class="line">f, _ := os.Create(<span class="string">&quot;goroutine.prof&quot;</span>)</span><br><span class="line"><span class="keyword">defer</span> f.Close()</span><br><span class="line">pprof.Lookup(<span class="string">&quot;goroutine&quot;</span>).WriteTo(f, <span class="number">2</span>)</span><br><span class="line"></span><br><span class="line"><span class="comment">// 导出内存分配情况</span></span><br><span class="line">f, _ := os.Create(<span class="string">&quot;allocs.prof&quot;</span>)</span><br><span class="line">pprof.Lookup(<span class="string">&quot;allocs&quot;</span>).WriteTo(f, <span class="number">0</span>) <span class="comment">// protobuf 格式，后续 go tool pprof 用</span></span><br><span class="line">f.Close()</span><br></pre></td></tr></table></figure>
+
+<p><strong>常用的Profile名称</strong></p>
+<table>
+<thead>
+<tr>
+<th>名称</th>
+<th>含义</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>&quot;goroutine&quot;</code></td>
+<td>打印所有 goroutine 的调用栈</td>
+</tr>
+<tr>
+<td><code>&quot;heap&quot;</code></td>
+<td>内存堆快照（存活对象）</td>
+</tr>
+<tr>
+<td><code>&quot;allocs&quot;</code></td>
+<td>所有分配过的对象（比 <code>&quot;heap&quot;</code> 多，包含已被释放的）</td>
+</tr>
+<tr>
+<td><code>&quot;threadcreate&quot;</code></td>
+<td>系统线程创建情况</td>
+</tr>
+<tr>
+<td><code>&quot;block&quot;</code></td>
+<td>阻塞事件（需 <code>runtime.SetBlockProfileRate</code> 开启）</td>
+</tr>
+<tr>
+<td><code>&quot;mutex&quot;</code></td>
+<td>锁竞争情况（需 <code>runtime.SetMutexProfileFraction</code> 开启）</td>
+</tr>
+</tbody></table>
+<hr>
+<h2><span id="netx2fhttpx2fpprof">net&#x2F;http&#x2F;pprof</span></h2><p>这也是 Go 官方提供的一个非常强大的性能分析工具，它通过 HTTP 接口暴露了程序的各种性能数据，更方便开发者在运行中的任何时刻进行监控和分析。</p>
+<h3><span id="适用场景">适用场景</span></h3><ul>
+<li><p><strong>需要实时分析的 HTTP 服务</strong>（Web 服务、API 服务等），可以直接暴露性能数据接口。</p>
+</li>
+<li><p><strong>无需关闭程序或重启服务</strong>，可以随时查看当前的性能数据。</p>
+</li>
+<li><p>适用于 <strong>开发环境</strong> 或 <strong>内网服务</strong>，需要<strong>控制访问</strong>以免暴露给外部用户。</p>
+</li>
+</ul>
+<h3><span id="集成步骤">集成步骤</span></h3><ol>
+<li><p><strong>导入 <code>net/http/pprof</code> 包</strong>：</p>
+<figure class="highlight go"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">import</span> (</span><br><span class="line">  _ <span class="string">&quot;net/http/pprof&quot;</span> <span class="comment">// 导入 pprof 包，自动注册路由</span></span><br><span class="line">  <span class="string">&quot;net/http&quot;</span></span><br><span class="line">  <span class="string">&quot;log&quot;</span></span><br><span class="line">)</span><br></pre></td></tr></table></figure>
+</li>
+<li><p><strong>启动 HTTP 服务并暴露性能分析接口</strong>：<br>在 HTTP 服务启动时，<code>net/http/pprof</code> 会自动将 <code>/debug/pprof/</code> 下的接口注册到默认的 <code>http.DefaultServeMux</code> 上，因此无需额外配置</p>
+<figure class="highlight go"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br></pre></td><td class="code"><pre><span class="line"><span class="function"><span class="keyword">func</span> <span class="title">main</span><span class="params">()</span></span> &#123;</span><br><span class="line">  <span class="comment">// 启动 Web 服务</span></span><br><span class="line">  <span class="keyword">go</span> <span class="function"><span class="keyword">func</span><span class="params">()</span></span> &#123;</span><br><span class="line">      log.Println(<span class="string">&quot;Starting pprof server on :6060&quot;</span>)</span><br><span class="line">      log.Fatal(http.ListenAndServe(<span class="string">&quot;localhost:6060&quot;</span>, <span class="literal">nil</span>)) <span class="comment">// 监听 /debug/pprof</span></span><br><span class="line">  &#125;()</span><br><span class="line"></span><br><span class="line">  <span class="comment">// 其他服务启动代码...</span></span><br><span class="line">  http.ListenAndServe(<span class="string">&quot;:8080&quot;</span>, <span class="literal">nil</span>)  <span class="comment">// 实际的业务服务</span></span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure></li>
+</ol>
+<p>这样，<code>net/http/pprof</code> 默认会启动一个 HTTP 服务，监听 <code>localhost:6060</code>，并暴露一组性能分析接口。你可以通过浏览器或者 <code>curl</code> 访问这些接口。</p>
+<p>pprof提供的常见接口已经在之前<strong>默认接口</strong>章节介绍过了，这里就不做赘述。</p>
+<p>放下一些使用示例：</p>
+<figure class="highlight bash"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br></pre></td><td class="code"><pre><span class="line"><span class="comment"># 访问 CPU profile</span></span><br><span class="line">curl http://localhost:6060/debug/pprof/profile?seconds=30 -o cpu.prof</span><br><span class="line"></span><br><span class="line"><span class="comment"># 访问 Heap profile</span></span><br><span class="line">curl http://localhost:6060/debug/pprof/heap -o heap.prof</span><br><span class="line"></span><br><span class="line"><span class="comment"># 访问 Goroutine profile</span></span><br><span class="line">curl http://localhost:6060/debug/pprof/goroutine -o goroutine.prof</span><br></pre></td></tr></table></figure>
+
+<p>按照这种方式，也能得到对应的<code>cpu.prof</code>，<code>heap.prof</code>等文件，然后同样选择自己喜欢的模式去查看分析代码性能即可。</p>
+<hr>
+<h2><span id="githubcomx2fgin-contribx2fpprof">github.com&#x2F;gin-contrib&#x2F;pprof</span></h2><p>[gin-contrib&#x2F;pprof](<a target="_blank" rel="noopener" href="https://github.com/gin-contrib/pprof">GitHub - gin-contrib&#x2F;pprof: gin pprof middleware</a>) 是一个为 <strong>Gin 框架</strong> 提供的中间件，能够方便地将 <strong>pprof</strong> 性能分析集成到 Gin 应用中。它基于 <code>net/http/pprof</code>，并将性能分析功能与 Gin 的路由系统更紧密地集成。</p>
+<h3><span id="适用场景">适用场景:</span></h3><ul>
+<li><p><strong>Gin 框架用户</strong>：如果我们正在使用 Gin 开发 Web 服务，可以通过 <code>gin-contrib/pprof</code> 快速集成 pprof，无需手动处理路由和中间件。</p>
+</li>
+<li><p><strong>实时性能监控</strong>：可以在开发、测试或内网环境中通过暴露的接口，随时查看程序的性能数据。</p>
+</li>
+<li><p><strong>多端口监控</strong>：通过提供对多个端口的支持，可以在不同的路由上使用不同的分析功能。</p>
+</li>
+</ul>
+<h3><span id="集成步骤">集成步骤：</span></h3><h4><span id="1下载依赖">1.下载依赖</span></h4><figure class="highlight bash"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">go get github.com/gin-contrib/pprof</span><br></pre></td></tr></table></figure>
+
+<h4><span id="2在代码中导入这个库">2.在代码中导入这个库</span></h4><figure class="highlight go"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">import</span> <span class="string">&quot;github.com/gin-contrib/pprof&quot;</span></span><br></pre></td></tr></table></figure>
+
+<h4><span id="3初始化pprof中间件">3.初始化pprof中间件</span></h4><p>通过 <code>gin-contrib/pprof</code> 注册中间件，便可以在 Gin 应用中自动提供 <code>/debug/pprof/</code> 路径，暴露性能分析接口。</p>
+<figure class="highlight go"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br></pre></td><td class="code"><pre><span class="line"><span class="function"><span class="keyword">func</span> <span class="title">main</span><span class="params">()</span></span> &#123;</span><br><span class="line">    r := gin.Default()</span><br><span class="line"></span><br><span class="line">    <span class="comment">// 将 pprof 集成到 Gin 路由中</span></span><br><span class="line">    pprof.Register(r)</span><br><span class="line"></span><br><span class="line">    <span class="comment">// 示例路由</span></span><br><span class="line">    r.GET(<span class="string">&quot;/hello&quot;</span>, <span class="function"><span class="keyword">func</span><span class="params">(c *gin.Context)</span></span> &#123;</span><br><span class="line">        c.String(<span class="number">200</span>, <span class="string">&quot;Hello, World!&quot;</span>)</span><br><span class="line">    &#125;)</span><br><span class="line"></span><br><span class="line">    <span class="comment">// 启动 Gin 服务</span></span><br><span class="line">    r.Run(<span class="string">&quot;:8080&quot;</span>)</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<p>这里需要解释一下：</p>
+<ul>
+<li><p><code>pprof.Register(r)</code>：这一行将 <code>pprof</code> 的性能分析接口注册到 Gin 的路由中。这样你就不需要手动设置 <code>/debug/pprof</code> 路径了。</p>
+</li>
+<li><p>默认情况下，Gin 将暴露如下几个接口：</p>
+<ul>
+<li><p><code>/debug/pprof/</code>：可以查看所有性能分析接口。</p>
+</li>
+<li><p><code>/debug/pprof/profile</code>：采样 CPU 数据。</p>
+</li>
+<li><p><code>/debug/pprof/heap</code>：查看内存堆快照。</p>
+</li>
+<li><p><code>/debug/pprof/goroutine</code>：查看当前所有 goroutine 的调用堆栈。</p>
+</li>
+<li><p><code>/debug/pprof/block</code>：查看阻塞事件。</p>
+</li>
+<li><p><code>/debug/pprof/mutex</code>：查看锁竞争事件。</p>
+</li>
+</ul>
+</li>
+</ul>
+<h4><span id="4一些进阶使用">4.一些进阶使用</span></h4><h5><span id="更改-pprof-默认路径前缀">更改 <code>pprof</code> 默认路径前缀</span></h5><p>默认情况下，<code>pprof</code> 会将性能分析接口注册到 <code>/debug/pprof/</code> 路径下。如果你想自定义这个路径前缀，可以通过 <code>pprof.Register()</code> 方法来实现。</p>
+<figure class="highlight go"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">package</span> main</span><br><span class="line"></span><br><span class="line"><span class="keyword">import</span> (</span><br><span class="line">    <span class="string">&quot;github.com/gin-gonic/gin&quot;</span></span><br><span class="line">    <span class="string">&quot;github.com/gin-contrib/pprof&quot;</span></span><br><span class="line">)</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="keyword">func</span> <span class="title">main</span><span class="params">()</span></span> &#123;</span><br><span class="line">    router := gin.Default()</span><br><span class="line">    <span class="comment">// 更改默认的路径前缀，改为 /dev/pprof</span></span><br><span class="line">    pprof.Register(router, <span class="string">&quot;dev/pprof&quot;</span>)</span><br><span class="line">    router.Run(<span class="string">&quot;:8080&quot;</span>)</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<p>在这段代码中，我们将 <code>pprof</code> 注册到一个自定义路径 <code>dev/pprof</code> 下，而不是默认的 <code>/debug/pprof</code>。这意味着你可以通过以下路径访问性能分析接口：</p>
+<ul>
+<li><p>CPU profiling: <code>http://localhost:8080/dev/pprof/profile?seconds=30</code></p>
+</li>
+<li><p>Heap profiling: <code>http://localhost:8080/dev/pprof/heap</code></p>
+</li>
+<li><p>Goroutine profiling: <code>http://localhost:8080/dev/pprof/goroutine</code></p>
+</li>
+</ul>
+<p>这种方式有助于在项目中避免与其他服务的路径冲突，或者只是想自定义路径结构以适应特定需求。</p>
+<h5><span id="使用自定义路由组">使用自定义路由组</span></h5><p>如果你希望将 <code>pprof</code> 路由注册到某个特定的路由组下，并且希望对访问这些路由添加一些权限控制（比如身份验证），你可以通过自定义路由组来实现。</p>
+<figure class="highlight go"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">package</span> main</span><br><span class="line"></span><br><span class="line"><span class="keyword">import</span> (</span><br><span class="line">    <span class="string">&quot;net/http&quot;</span></span><br><span class="line">    <span class="string">&quot;github.com/gin-contrib/pprof&quot;</span></span><br><span class="line">    <span class="string">&quot;github.com/gin-gonic/gin&quot;</span></span><br><span class="line">)</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="keyword">func</span> <span class="title">main</span><span class="params">()</span></span> &#123;</span><br><span class="line">    router := gin.Default()</span><br><span class="line"></span><br><span class="line">    <span class="comment">// 创建一个自定义的路由组 /debug，并添加权限控制</span></span><br><span class="line">    debugGroup := router.Group(<span class="string">&quot;/debug&quot;</span>, <span class="function"><span class="keyword">func</span><span class="params">(c *gin.Context)</span></span> &#123;</span><br><span class="line">        <span class="comment">// 在此处添加身份验证逻辑（如检查 Authorization 头）</span></span><br><span class="line">        <span class="keyword">if</span> c.Request.Header.Get(<span class="string">&quot;Authorization&quot;</span>) != <span class="string">&quot;foobar&quot;</span> &#123;</span><br><span class="line">            c.AbortWithStatus(http.StatusForbidden)</span><br><span class="line">            <span class="keyword">return</span></span><br><span class="line">        &#125;</span><br><span class="line">        c.Next()</span><br><span class="line">    &#125;)</span><br><span class="line"></span><br><span class="line">    <span class="comment">// 注册 pprof 路由到 debugGroup 路由组</span></span><br><span class="line">    pprof.RouteRegister(debugGroup, <span class="string">&quot;pprof&quot;</span>)</span><br><span class="line">    router.Run(<span class="string">&quot;:8080&quot;</span>)</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<p>在这段代码中：</p>
+<ul>
+<li><p>我们创建了一个自定义的路由组 <code>/debug</code>，并在该路由组中加入了身份验证逻辑（如果 <code>Authorization</code> 头的值不是 <code>foobar</code>，则拒绝访问）。</p>
+</li>
+<li><p>然后，我们将 <code>pprof</code> 的路由注册到这个自定义的路由组上，使用 <code>pprof.RouteRegister()</code> 方法。这意味着 <code>pprof</code> 的所有接口（如 <code>/profile</code>, <code>/heap</code>, <code>/goroutine</code> 等）现在都位于 <code>/debug/pprof/</code> 下。</p>
+</li>
+</ul>
+<p>例如，访问 CPU Profiling 时需要通过以下路径：</p>
+<figure class="highlight bash"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">`http://localhost:8080/debug/pprof/profile?seconds=30`</span><br></pre></td></tr></table></figure>
+
+<p>而且如果没有正确的 <code>Authorization</code> 头，访问将被拒绝（返回 403 Forbidden）。</p>
+
+  </div>
+</article>
+
+
+
+        
+          <div id="footer-post-container">
+  <div id="footer-post">
+
+    <div id="nav-footer" style="display: none">
+      <ul>
+        
+          <li><a href="/">首页</a></li>
+        
+          <li><a href="/about/">关于</a></li>
+        
+          <li><a href="/archives/">文章</a></li>
+        
+          <li><a target="_blank" rel="noopener" href="https://github.com/0xccio">项目</a></li>
+        
+      </ul>
+    </div>
+
+    
+    
+      <div id="toc-footer" style="display: none">
+        <ol class="toc"><li class="toc-item toc-level-2"><a class="toc-link"><span class="toc-number">1.</span> <span class="toc-text">简介</span></a></li><li class="toc-item toc-level-2"><a class="toc-link"><span class="toc-number">2.</span> <span class="toc-text">pprof默认接口</span></a></li><li class="toc-item toc-level-2"><a class="toc-link"><span class="toc-number">3.</span> <span class="toc-text">pprof不同模式的使用</span></a><ol class="toc-child"><li class="toc-item toc-level-3"><a class="toc-link"><span class="toc-number">3.1.</span> <span class="toc-text">1.交互模式</span></a></li><li class="toc-item toc-level-3"><a class="toc-link"><span class="toc-number">3.2.</span> <span class="toc-text">2.非交互模式</span></a></li><li class="toc-item toc-level-3"><a class="toc-link"><span class="toc-number">3.3.</span> <span class="toc-text">3.Web模式</span></a></li></ol></li><li class="toc-item toc-level-2"><a class="toc-link"><span class="toc-number">4.</span> <span class="toc-text">runtime&#x2F;pprof</span></a><ol class="toc-child"><li class="toc-item toc-level-3"><a class="toc-link"><span class="toc-number">4.1.</span> <span class="toc-text">适用场景</span></a></li><li class="toc-item toc-level-3"><a class="toc-link"><span class="toc-number">4.2.</span> <span class="toc-text">常用函数</span></a><ol class="toc-child"><li class="toc-item toc-level-4"><a class="toc-link"><span class="toc-number">4.2.1.</span> <span class="toc-text">1. CPU 性能</span></a></li><li class="toc-item toc-level-4"><a class="toc-link"><span class="toc-number">4.2.2.</span> <span class="toc-text">2. 内存堆信息</span></a></li><li class="toc-item toc-level-4"><a class="toc-link"><span class="toc-number">4.2.3.</span> <span class="toc-text">3.获取特定类型的分析数据</span></a></li></ol></li></ol></li><li class="toc-item toc-level-2"><a class="toc-link"><span class="toc-number">5.</span> <span class="toc-text">net&#x2F;http&#x2F;pprof</span></a><ol class="toc-child"><li class="toc-item toc-level-3"><a class="toc-link"><span class="toc-number">5.1.</span> <span class="toc-text">适用场景</span></a></li><li class="toc-item toc-level-3"><a class="toc-link"><span class="toc-number">5.2.</span> <span class="toc-text">集成步骤</span></a></li></ol></li><li class="toc-item toc-level-2"><a class="toc-link"><span class="toc-number">6.</span> <span class="toc-text">github.com&#x2F;gin-contrib&#x2F;pprof</span></a><ol class="toc-child"><li class="toc-item toc-level-3"><a class="toc-link"><span class="toc-number">6.1.</span> <span class="toc-text">适用场景:</span></a></li><li class="toc-item toc-level-3"><a class="toc-link"><span class="toc-number">6.2.</span> <span class="toc-text">集成步骤：</span></a><ol class="toc-child"><li class="toc-item toc-level-4"><a class="toc-link"><span class="toc-number">6.2.1.</span> <span class="toc-text">1.下载依赖</span></a></li><li class="toc-item toc-level-4"><a class="toc-link"><span class="toc-number">6.2.2.</span> <span class="toc-text">2.在代码中导入这个库</span></a></li><li class="toc-item toc-level-4"><a class="toc-link"><span class="toc-number">6.2.3.</span> <span class="toc-text">3.初始化pprof中间件</span></a></li><li class="toc-item toc-level-4"><a class="toc-link"><span class="toc-number">6.2.4.</span> <span class="toc-text">4.一些进阶使用</span></a><ol class="toc-child"><li class="toc-item toc-level-5"><a class="toc-link"><span class="toc-number">6.2.4.1.</span> <span class="toc-text">更改 pprof 默认路径前缀</span></a></li><li class="toc-item toc-level-5"><a class="toc-link"><span class="toc-number">6.2.4.2.</span> <span class="toc-text">使用自定义路由组</span></a></li></ol></li></ol></li></ol></li></ol>
+      </div>
+    
+
+    <div id="share-footer" style="display: none">
+      <ul>
+  <li><a class="icon" target="_blank" rel="noopener" href="http://www.facebook.com/sharer.php?u=https://0xccio.github.io/2025/08/30/pprof%E5%88%B0%E5%BA%95%E6%80%8E%E4%B9%88%E7%94%A8%EF%BC%9F/"><i class="fab fa-facebook fa-lg" aria-hidden="true"></i></a></li>
+  <li><a class="icon" target="_blank" rel="noopener" href="https://twitter.com/share?url=https://0xccio.github.io/2025/08/30/pprof%E5%88%B0%E5%BA%95%E6%80%8E%E4%B9%88%E7%94%A8%EF%BC%9F/&text=pprof到底怎么用？"><i class="fab fa-twitter fa-lg" aria-hidden="true"></i></a></li>
+  <li><a class="icon" target="_blank" rel="noopener" href="http://www.linkedin.com/shareArticle?url=https://0xccio.github.io/2025/08/30/pprof%E5%88%B0%E5%BA%95%E6%80%8E%E4%B9%88%E7%94%A8%EF%BC%9F/&title=pprof到底怎么用？"><i class="fab fa-linkedin fa-lg" aria-hidden="true"></i></a></li>
+  <li><a class="icon" target="_blank" rel="noopener" href="https://pinterest.com/pin/create/bookmarklet/?url=https://0xccio.github.io/2025/08/30/pprof%E5%88%B0%E5%BA%95%E6%80%8E%E4%B9%88%E7%94%A8%EF%BC%9F/&is_video=false&description=pprof到底怎么用？"><i class="fab fa-pinterest fa-lg" aria-hidden="true"></i></a></li>
+  <li><a class="icon" href="mailto:?subject=pprof到底怎么用？&body=Check out this article: https://0xccio.github.io/2025/08/30/pprof%E5%88%B0%E5%BA%95%E6%80%8E%E4%B9%88%E7%94%A8%EF%BC%9F/"><i class="fa-solid fa-envelope fa-lg" aria-hidden="true"></i></a></li>
+  <li><a class="icon" target="_blank" rel="noopener" href="https://getpocket.com/save?url=https://0xccio.github.io/2025/08/30/pprof%E5%88%B0%E5%BA%95%E6%80%8E%E4%B9%88%E7%94%A8%EF%BC%9F/&title=pprof到底怎么用？"><i class="fab fa-get-pocket fa-lg" aria-hidden="true"></i></a></li>
+  <li><a class="icon" target="_blank" rel="noopener" href="http://reddit.com/submit?url=https://0xccio.github.io/2025/08/30/pprof%E5%88%B0%E5%BA%95%E6%80%8E%E4%B9%88%E7%94%A8%EF%BC%9F/&title=pprof到底怎么用？"><i class="fab fa-reddit fa-lg" aria-hidden="true"></i></a></li>
+  <li><a class="icon" target="_blank" rel="noopener" href="http://www.stumbleupon.com/submit?url=https://0xccio.github.io/2025/08/30/pprof%E5%88%B0%E5%BA%95%E6%80%8E%E4%B9%88%E7%94%A8%EF%BC%9F/&title=pprof到底怎么用？"><i class="fab fa-stumbleupon fa-lg" aria-hidden="true"></i></a></li>
+  <li><a class="icon" target="_blank" rel="noopener" href="http://digg.com/submit?url=https://0xccio.github.io/2025/08/30/pprof%E5%88%B0%E5%BA%95%E6%80%8E%E4%B9%88%E7%94%A8%EF%BC%9F/&title=pprof到底怎么用？"><i class="fab fa-digg fa-lg" aria-hidden="true"></i></a></li>
+  <li><a class="icon" target="_blank" rel="noopener" href="http://www.tumblr.com/share/link?url=https://0xccio.github.io/2025/08/30/pprof%E5%88%B0%E5%BA%95%E6%80%8E%E4%B9%88%E7%94%A8%EF%BC%9F/&name=pprof到底怎么用？&description="><i class="fab fa-tumblr fa-lg" aria-hidden="true"></i></a></li>
+  <li><a class="icon" target="_blank" rel="noopener" href="https://news.ycombinator.com/submitlink?u=https://0xccio.github.io/2025/08/30/pprof%E5%88%B0%E5%BA%95%E6%80%8E%E4%B9%88%E7%94%A8%EF%BC%9F/&t=pprof到底怎么用？"><i class="fab fa-hacker-news fa-lg" aria-hidden="true"></i></a></li>
+</ul>
+
+    </div>
+
+    <div id="actions-footer">
+        <a id="menu" class="icon" href="#" onclick="$('#nav-footer').toggle();return false;"><i class="fa-solid fa-bars fa-lg" aria-hidden="true"></i> 菜单</a>
+        
+          <a id="toc" class="icon" href="#" onclick="$('#toc-footer').toggle();return false;"><i class="fa-solid fa-list fa-lg" aria-hidden="true"></i> 目录</a>
+        
+        <a id="share" class="icon" href="#" onclick="$('#share-footer').toggle();return false;"><i class="fa-solid fa-share-alt fa-lg" aria-hidden="true"></i> 分享</a>
+        <a id="top" style="display:none" class="icon" href="#" onclick="$('html, body').animate({ scrollTop: 0 }, 'fast');"><i class="fa-solid fa-chevron-up fa-lg" aria-hidden="true"></i> 返回顶部</a>
+    </div>
+
+  </div>
+</div>
+
+        
+        <footer id="footer">
+  <div class="footer-left">
+    Copyright &copy;
+    
+    
+    2016-2025
+    0xccio
+  </div>
+  <div class="footer-right">
+    <nav>
+      <ul>
+        <!--
+       --><li><a href="/">首页</a></li><!--
+     --><!--
+       --><li><a href="/about/">关于</a></li><!--
+     --><!--
+       --><li><a href="/archives/">文章</a></li><!--
+     --><!--
+       --><li><a target="_blank" rel="noopener" href="https://github.com/0xccio">项目</a></li><!--
+     -->
+      </ul>
+    </nav>
+  </div>
+</footer>
+
+    </div>
+    <!-- styles -->
+
+
+
+  <link rel="preload" as="style" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" crossorigin="anonymous" onload="this.onload=null;this.rel='stylesheet'"/>
+
+
+    <!-- jquery -->
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jquery/3.6.0/jquery.min.js" crossorigin="anonymous"></script>
+
+
+
+
+<!-- clipboard -->
+
+  
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/clipboard.js/2.0.7/clipboard.min.js" crossorigin="anonymous"></script>
+  
+  <script type="text/javascript">
+  $(function() {
+    // copy-btn HTML
+    var btn = "<span class=\"btn-copy tooltipped tooltipped-sw\" aria-label=\"复制到粘贴板！\">";
+    btn += '<i class="fa-regular fa-clone"></i>';
+    btn += '</span>';
+    // mount it!
+    $(".highlight table").before(btn);
+    var clip = new ClipboardJS('.btn-copy', {
+      text: function(trigger) {
+        return Array.from(trigger.nextElementSibling.querySelectorAll('.code')).reduce((str,it)=>str+it.innerText+'\n','')
+      }
+    });
+    clip.on('success', function(e) {
+      e.trigger.setAttribute('aria-label', "复制成功！");
+      e.clearSelection();
+    })
+  })
+  </script>
+
+
+<script src="/js/main.js"></script>
+
+<!-- search -->
+
+<!-- Baidu Analytics -->
+
+<!-- Cloudflare Analytics -->
+
+<!-- Disqus Comments -->
+
+<!-- utterances Comments -->
+
+</body>
+</html>
