@@ -1,0 +1,109 @@
+/* 去掉主题在标题前加的 # 符号（两种容器类都覆盖） */
+.article-entry h1:before,
+.article-entry h2:before,
+.article-entry h3:before,
+.article-entry h4:before,
+.article-entry h5:before,
+.article-entry h6:before,
+.post h1:before,
+.post h2:before,
+.post h3:before,
+.post h4:before,
+.post h5:before,
+.post h6:before {
+  content: none !important;
+  margin-right: 0;
+}
+/* 如果主题曾为 # 预留了缩进/间距，顺手归零 */
+.article-entry h1,
+.article-entry h2,
+.article-entry h3,
+.article-entry h4,
+.article-entry h5,
+.article-entry h6,
+.post h1,
+.post h2,
+.post h3,
+.post h4,
+.post h5,
+.post h6 {
+  text-indent: 0;
+  padding-left: 0;
+}
+/* === 可调变量：按你主题正文宽度微调 === */
+:root {
+  --content-w: 760px /* 正文区域的视觉宽度（常见 720~800）*/;
+  --toc-w: 220px /* 目录宽度 */;
+  --toc-gap: 24px /* 正文与目录的间距 */;
+}
+/* 左侧固定目录：不影响正文居中 */
+.toc {
+  position: fixed;
+  top: 100px;
+/* 目录左边界 = 页面中线 - 半个正文宽度 - 间距 - 目录宽 */
+  left: calc(50% - var(--content-w) / 2 - var(--toc-gap) - var(--toc-w));
+  width: var(--toc-w);
+  max-height: calc(100vh - 140px);
+  overflow: auto;
+  padding: 10px 12px;
+  background: #f8fafc;
+  border-left: 3px solid #e5e7eb;
+  text-align: left;
+  font-size: 1rem;
+  z-index: 10;
+}
+/* 目录内部样式（左对齐 + 合理缩进） */
+.toc ul {
+  list-style: none;
+  padding-left: 0;
+}
+.toc ul ul {
+  padding-left: 6px;
+}
+/* ===== 只显示到 H2/H3（隐藏 H1/H4/H5/H6） ===== */
+#header-post #toc .toc-level-1,
+#header-post #toc .toc-level-4,
+#header-post #toc .toc-level-5,
+#header-post #toc .toc-level-6 {
+  display: none !important;
+}
+/* ===== 去掉目录项前面的所有符号（# / 链🔗 等）===== */
+#header-post #toc .toc-level-2:before,
+#header-post #toc .toc-level-3:before,
+#header-post #toc .toc-link:before {
+  content: none !important;
+  display: none !important;
+}
+/* ===== 调大目录字号/行高（按需再调）===== */
+#header-post #toc .toc-level-2 {
+  font-size: 1.05rem;
+  line-height: 1.55;
+}
+#header-post #toc .toc-level-3 {
+  font-size: 0.98rem;
+  line-height: 1.55;
+}
+/* 让正文保持居中（撤销之前的 margin-left 推移） */
+@media (min-width: 1025px) {
+  .article,
+  .post,
+  .article-entry {
+    margin-left: auto;
+    margin-right: auto;
+  }
+}
+/* 锚点跳转留出顶部空间，避免标题被顶栏遮住 */
+.article-entry h1,
+.article-entry h2,
+.article-entry h3,
+.article-entry h4,
+.article-entry h5,
+.article-entry h6,
+.post h1,
+.post h2,
+.post h3,
+.post h4,
+.post h5,
+.post h6 {
+  scroll-margin-top: 80px;
+}
