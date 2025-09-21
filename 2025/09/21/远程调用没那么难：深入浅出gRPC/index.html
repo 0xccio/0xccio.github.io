@@ -1,0 +1,572 @@
+<!DOCTYPE html>
+<html lang=zh>
+<head>
+    <!-- so meta -->
+    <meta charset="utf-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="HandheldFriendly" content="True">
+    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=5" />
+    <meta name="description" content="前段时间我突然发现，自己对 gRPC 的理解其实挺尴尬的 🤔。 平时写 Go 项目的时候经常用到 gRPC，服务端、客户端都照着 Demo 跑得挺顺利，但如果有人突然问我：  “gRPC 到底是怎么让你在 Go 里像本地函数一样去调远程服务的？”  我估计只能支支吾吾地说出几个关键词：protobuf、HTTP&#x2F;2、快！ 但这显然不够。所以这次写下这篇文章，梳理一下 RPC 的核心思想，以及 g">
+<meta property="og:type" content="article">
+<meta property="og:title" content="远程调用没那么难：深入浅出gRPC">
+<meta property="og:url" content="https://0xccio.github.io/2025/09/21/%E8%BF%9C%E7%A8%8B%E8%B0%83%E7%94%A8%E6%B2%A1%E9%82%A3%E4%B9%88%E9%9A%BE%EF%BC%9A%E6%B7%B1%E5%85%A5%E6%B5%85%E5%87%BAgRPC/index.html">
+<meta property="og:site_name" content="ccio">
+<meta property="og:description" content="前段时间我突然发现，自己对 gRPC 的理解其实挺尴尬的 🤔。 平时写 Go 项目的时候经常用到 gRPC，服务端、客户端都照着 Demo 跑得挺顺利，但如果有人突然问我：  “gRPC 到底是怎么让你在 Go 里像本地函数一样去调远程服务的？”  我估计只能支支吾吾地说出几个关键词：protobuf、HTTP&#x2F;2、快！ 但这显然不够。所以这次写下这篇文章，梳理一下 RPC 的核心思想，以及 g">
+<meta property="og:locale" content="zh_CN">
+<meta property="og:image" content="https://0xccio.github.io/images/grpc/rpc_call.png">
+<meta property="og:image" content="https://0xccio.github.io/images/grpc/grpc_layers.png">
+<meta property="article:published_time" content="2025-09-21T05:36:42.000Z">
+<meta property="article:modified_time" content="2025-09-21T08:01:48.779Z">
+<meta property="article:author" content="0xccio">
+<meta property="article:tag" content="gRPC">
+<meta name="twitter:card" content="summary">
+<meta name="twitter:image" content="https://0xccio.github.io/images/grpc/rpc_call.png">
+    
+    
+      
+        
+          <link rel="shortcut icon" href="/images/favicon.ico">
+        
+      
+      
+        
+          <link rel="icon" type="image/png" href="/images/favicon-192x192.png" sizes="192x192">
+        
+      
+      
+        
+          <link rel="apple-touch-icon" sizes="180x180" href="/images/apple-touch-icon.png">
+        
+      
+    
+    <!-- title -->
+    <title>远程调用没那么难：深入浅出gRPC</title>
+    <!-- async scripts -->
+    <!-- Google Analytics -->
+
+
+    <!-- Umami Analytics -->
+
+
+    <!-- styles -->
+    
+<link rel="stylesheet" href="/css/style.css">
+
+    <!-- persian styles -->
+    
+    <!-- rss -->
+    
+    
+	<!-- mathjax -->
+	
+<meta name="generator" content="Hexo 7.3.0"><link rel="stylesheet" href="/css/prism-okaidia.css" type="text/css">
+<link rel="stylesheet" href="/css/prism-line-numbers.css" type="text/css"></head>
+
+<body class="max-width mx-auto px3 ltr">
+    
+      <div id="header-post">
+  <a id="menu-icon" href="#" aria-label="目录"><i class="fa-solid fa-bars fa-lg"></i></a>
+  <a id="menu-icon-tablet" href="#" aria-label="目录"><i class="fa-solid fa-bars fa-lg"></i></a>
+  <a id="top-icon-tablet" href="#" aria-label="顶部" onclick="$('html, body').animate({ scrollTop: 0 }, 'fast');" style="display:none;"><i class="fa-solid fa-chevron-up fa-lg"></i></a>
+  <span id="menu">
+    <span id="nav">
+      <ul>
+        <!--
+       --><li><a href="/">首页</a></li><!--
+     --><!--
+       --><li><a href="/about/">关于</a></li><!--
+     --><!--
+       --><li><a href="/archives/">文章</a></li><!--
+     --><!--
+       --><li><a target="_blank" rel="noopener" href="https://github.com/0xccio">项目</a></li><!--
+     -->
+      </ul>
+    </span>
+    <br/>
+    <span id="actions">
+      <ul>
+        
+        
+        <li><a class="icon" aria-label="下一篇" href="/2025/09/14/%E4%BB%8E%E5%8D%95%E4%BA%BA%E5%BC%80%E5%8F%91%E5%88%B0%E5%9B%A2%E9%98%9F%E5%8D%8F%E4%BD%9C%E7%9A%84Git%E5%8D%87%E7%BA%A7%E4%B9%8B%E8%B7%AF/"><i class="fa-solid fa-chevron-right" aria-hidden="true" onmouseover="$('#i-next').toggle();" onmouseout="$('#i-next').toggle();"></i></a></li>
+        
+        <li><a class="icon" aria-label="返回顶部" href="#" onclick="$('html, body').animate({ scrollTop: 0 }, 'fast');"><i class="fa-solid fa-chevron-up" aria-hidden="true" onmouseover="$('#i-top').toggle();" onmouseout="$('#i-top').toggle();"></i></a></li>
+        <li><a class="icon" aria-label="分享文章" href="#"><i class="fa-solid fa-share-alt" aria-hidden="true" onmouseover="$('#i-share').toggle();" onmouseout="$('#i-share').toggle();" onclick="$('#share').toggle();return false;"></i></a></li>
+      </ul>
+      <span id="i-prev" class="info" style="display:none;">上一篇</span>
+      <span id="i-next" class="info" style="display:none;">下一篇</span>
+      <span id="i-top" class="info" style="display:none;">返回顶部</span>
+      <span id="i-share" class="info" style="display:none;">分享文章</span>
+    </span>
+    <br/>
+    <div id="share" style="display: none">
+      <ul>
+  <li><a class="icon" target="_blank" rel="noopener" href="http://www.facebook.com/sharer.php?u=https://0xccio.github.io/2025/09/21/%E8%BF%9C%E7%A8%8B%E8%B0%83%E7%94%A8%E6%B2%A1%E9%82%A3%E4%B9%88%E9%9A%BE%EF%BC%9A%E6%B7%B1%E5%85%A5%E6%B5%85%E5%87%BAgRPC/"><i class="fab fa-facebook " aria-hidden="true"></i></a></li>
+  <li><a class="icon" target="_blank" rel="noopener" href="https://twitter.com/share?url=https://0xccio.github.io/2025/09/21/%E8%BF%9C%E7%A8%8B%E8%B0%83%E7%94%A8%E6%B2%A1%E9%82%A3%E4%B9%88%E9%9A%BE%EF%BC%9A%E6%B7%B1%E5%85%A5%E6%B5%85%E5%87%BAgRPC/&text=远程调用没那么难：深入浅出gRPC"><i class="fab fa-twitter " aria-hidden="true"></i></a></li>
+  <li><a class="icon" target="_blank" rel="noopener" href="http://www.linkedin.com/shareArticle?url=https://0xccio.github.io/2025/09/21/%E8%BF%9C%E7%A8%8B%E8%B0%83%E7%94%A8%E6%B2%A1%E9%82%A3%E4%B9%88%E9%9A%BE%EF%BC%9A%E6%B7%B1%E5%85%A5%E6%B5%85%E5%87%BAgRPC/&title=远程调用没那么难：深入浅出gRPC"><i class="fab fa-linkedin " aria-hidden="true"></i></a></li>
+  <li><a class="icon" target="_blank" rel="noopener" href="https://pinterest.com/pin/create/bookmarklet/?url=https://0xccio.github.io/2025/09/21/%E8%BF%9C%E7%A8%8B%E8%B0%83%E7%94%A8%E6%B2%A1%E9%82%A3%E4%B9%88%E9%9A%BE%EF%BC%9A%E6%B7%B1%E5%85%A5%E6%B5%85%E5%87%BAgRPC/&is_video=false&description=远程调用没那么难：深入浅出gRPC"><i class="fab fa-pinterest " aria-hidden="true"></i></a></li>
+  <li><a class="icon" href="mailto:?subject=远程调用没那么难：深入浅出gRPC&body=Check out this article: https://0xccio.github.io/2025/09/21/%E8%BF%9C%E7%A8%8B%E8%B0%83%E7%94%A8%E6%B2%A1%E9%82%A3%E4%B9%88%E9%9A%BE%EF%BC%9A%E6%B7%B1%E5%85%A5%E6%B5%85%E5%87%BAgRPC/"><i class="fa-solid fa-envelope " aria-hidden="true"></i></a></li>
+  <li><a class="icon" target="_blank" rel="noopener" href="https://getpocket.com/save?url=https://0xccio.github.io/2025/09/21/%E8%BF%9C%E7%A8%8B%E8%B0%83%E7%94%A8%E6%B2%A1%E9%82%A3%E4%B9%88%E9%9A%BE%EF%BC%9A%E6%B7%B1%E5%85%A5%E6%B5%85%E5%87%BAgRPC/&title=远程调用没那么难：深入浅出gRPC"><i class="fab fa-get-pocket " aria-hidden="true"></i></a></li>
+  <li><a class="icon" target="_blank" rel="noopener" href="http://reddit.com/submit?url=https://0xccio.github.io/2025/09/21/%E8%BF%9C%E7%A8%8B%E8%B0%83%E7%94%A8%E6%B2%A1%E9%82%A3%E4%B9%88%E9%9A%BE%EF%BC%9A%E6%B7%B1%E5%85%A5%E6%B5%85%E5%87%BAgRPC/&title=远程调用没那么难：深入浅出gRPC"><i class="fab fa-reddit " aria-hidden="true"></i></a></li>
+  <li><a class="icon" target="_blank" rel="noopener" href="http://www.stumbleupon.com/submit?url=https://0xccio.github.io/2025/09/21/%E8%BF%9C%E7%A8%8B%E8%B0%83%E7%94%A8%E6%B2%A1%E9%82%A3%E4%B9%88%E9%9A%BE%EF%BC%9A%E6%B7%B1%E5%85%A5%E6%B5%85%E5%87%BAgRPC/&title=远程调用没那么难：深入浅出gRPC"><i class="fab fa-stumbleupon " aria-hidden="true"></i></a></li>
+  <li><a class="icon" target="_blank" rel="noopener" href="http://digg.com/submit?url=https://0xccio.github.io/2025/09/21/%E8%BF%9C%E7%A8%8B%E8%B0%83%E7%94%A8%E6%B2%A1%E9%82%A3%E4%B9%88%E9%9A%BE%EF%BC%9A%E6%B7%B1%E5%85%A5%E6%B5%85%E5%87%BAgRPC/&title=远程调用没那么难：深入浅出gRPC"><i class="fab fa-digg " aria-hidden="true"></i></a></li>
+  <li><a class="icon" target="_blank" rel="noopener" href="http://www.tumblr.com/share/link?url=https://0xccio.github.io/2025/09/21/%E8%BF%9C%E7%A8%8B%E8%B0%83%E7%94%A8%E6%B2%A1%E9%82%A3%E4%B9%88%E9%9A%BE%EF%BC%9A%E6%B7%B1%E5%85%A5%E6%B5%85%E5%87%BAgRPC/&name=远程调用没那么难：深入浅出gRPC&description="><i class="fab fa-tumblr " aria-hidden="true"></i></a></li>
+  <li><a class="icon" target="_blank" rel="noopener" href="https://news.ycombinator.com/submitlink?u=https://0xccio.github.io/2025/09/21/%E8%BF%9C%E7%A8%8B%E8%B0%83%E7%94%A8%E6%B2%A1%E9%82%A3%E4%B9%88%E9%9A%BE%EF%BC%9A%E6%B7%B1%E5%85%A5%E6%B5%85%E5%87%BAgRPC/&t=远程调用没那么难：深入浅出gRPC"><i class="fab fa-hacker-news " aria-hidden="true"></i></a></li>
+</ul>
+
+    </div>
+    
+    
+      <div id="toc">
+        <ol class="toc"><li class="toc-item toc-level-2"><a class="toc-link" href="#1-rpc-%E7%9A%84%E6%9C%AC%E8%B4%A8%E6%98%AF%E4%BB%80%E4%B9%88"><span class="toc-number">1.</span> <span class="toc-text">1. RPC 的本质是什么？</span></a></li><li class="toc-item toc-level-2"><a class="toc-link" href="#2-grpc-google%E5%87%BA%E5%93%81%E9%AB%98%E9%85%8D%E7%89%88"><span class="toc-number">2.</span> <span class="toc-text">2. gRPC: Google出品高配版</span></a><ol class="toc-child"><li class="toc-item toc-level-3"><a class="toc-link" href="#21-grpc-%E7%9A%84%E6%80%BB%E4%BD%93%E6%9E%B6%E6%9E%84"><span class="toc-number">2.1.</span> <span class="toc-text">2.1 gRPC 的总体架构</span></a></li><li class="toc-item toc-level-3"><a class="toc-link" href="#22-grpc-%E6%98%AF%E5%A6%82%E4%BD%95%E4%B8%80%E6%AD%A5%E6%AD%A5%E5%AE%8C%E6%88%90-rpc-%E8%B0%83%E7%94%A8%E7%9A%84"><span class="toc-number">2.2.</span> <span class="toc-text">2.2 gRPC 是如何一步步完成 RPC 调用的？</span></a></li></ol></li><li class="toc-item toc-level-2"><a class="toc-link" href="#3-grpc%E6%80%8E%E4%B9%88%E7%94%A8"><span class="toc-number">3.</span> <span class="toc-text">3. gRPC怎么用？</span></a><ol class="toc-child"><li class="toc-item toc-level-3"><a class="toc-link" href="#31-%E8%AE%A2%E5%A5%91%E7%BA%A6"><span class="toc-number">3.1.</span> <span class="toc-text">3.1 订契约</span></a></li><li class="toc-item toc-level-3"><a class="toc-link" href="#32-%E7%94%9F%E4%BB%A3%E7%A0%81"><span class="toc-number">3.2.</span> <span class="toc-text">3.2 生代码</span></a><ol class="toc-child"><li class="toc-item toc-level-4"><a class="toc-link" href="#1%E5%AE%89%E8%A3%85%E5%BF%85%E8%A6%81%E5%B7%A5%E5%85%B7"><span class="toc-number">3.2.1.</span> <span class="toc-text">1.安装必要工具</span></a></li><li class="toc-item toc-level-4"><a class="toc-link" href="#2%E7%94%9F%E6%88%90%E4%BB%A3%E7%A0%81"><span class="toc-number">3.2.2.</span> <span class="toc-text">2.生成代码</span></a></li></ol></li><li class="toc-item toc-level-3"><a class="toc-link" href="#33-%E5%86%99%E4%B8%9A%E5%8A%A1%E8%B5%B7%E6%9C%8D%E5%8A%A1%E6%8B%A8%E5%8F%B7"><span class="toc-number">3.3.</span> <span class="toc-text">3.3 写业务+起服务&#x2F;拨号</span></a><ol class="toc-child"><li class="toc-item toc-level-5"><a class="toc-link" href="#331-%E5%A6%82%E6%9E%9C%E9%A1%B9%E7%9B%AE%E8%A6%81%E4%BD%9C%E4%B8%BA-grpc-%E6%9C%8D%E5%8A%A1%E7%AB%AF"><span class="toc-number">3.3.0.1.</span> <span class="toc-text">3.3.1 如果项目要作为 gRPC 服务端</span></a></li><li class="toc-item toc-level-5"><a class="toc-link" href="#332-%E5%A6%82%E6%9E%9C%E9%A1%B9%E7%9B%AE%E8%A6%81%E4%BD%9C%E4%B8%BA-grpc-%E5%AE%A2%E6%88%B7%E7%AB%AF"><span class="toc-number">3.3.0.2.</span> <span class="toc-text">3.3.2 如果项目要作为 gRPC 客户端</span></a></li></ol></li></ol></li></ol></li></ol>
+      </div>
+    
+  </span>
+</div>
+
+    
+    <div class="content index py4 ">
+        
+        <article class="post h-entry" itemscope itemtype="http://schema.org/BlogPosting">
+  <header>
+    
+    <h1 class="posttitle p-name" itemprop="name headline">
+        远程调用没那么难：深入浅出gRPC
+    </h1>
+
+
+
+    <div class="meta">
+      <span class="author p-author h-card" itemprop="author" itemscope itemtype="http://schema.org/Person">
+        <span class="p-name" itemprop="name">0xccio</span>
+      </span>
+      
+    <div class="postdate">
+      
+        <time datetime="2025-09-21T05:36:42.000Z" class="dt-published" itemprop="datePublished">2025-09-21</time>
+        
+      
+    </div>
+
+
+      
+
+      
+    <div class="article-tag">
+        <i class="fa-solid fa-tag"></i>
+        <a class="p-category" href="/tags/gRPC/" rel="tag">gRPC</a>
+    </div>
+
+
+    </div>
+  </header>
+  
+
+  <div class="content e-content" itemprop="articleBody">
+    <p>前段时间我突然发现，自己对 gRPC 的理解其实挺尴尬的 🤔。<br>
+平时写 Go 项目的时候经常用到 gRPC，服务端、客户端都照着 Demo 跑得挺顺利，但如果有人突然问我：</p>
+<blockquote>
+<p>“gRPC 到底是怎么让你在 Go 里像本地函数一样去调远程服务的？”</p>
+</blockquote>
+<p>我估计只能支支吾吾地说出几个关键词：<strong>protobuf、HTTP/2、快！</strong><br>
+但这显然不够。所以这次写下这篇文章，梳理一下 RPC 的核心思想，以及 gRPC 在 Go 项目里到底该怎么用。</p>
+<hr>
+<h2 id="1-rpc-的本质是什么" tabindex="-1">1. RPC 的本质是什么？</h2>
+<p>RPC（Remote Procedure Call）翻译过来就是“远程过程调用”。听起来很高大上，其实一句话：</p>
+<blockquote>
+<p><strong>RPC 要让你调用远程机器上的函数，感觉就像调用本地函数一样简单。</strong></p>
+</blockquote>
+<p>它背后的关键就是一个“障眼法”：</p>
+<ol>
+<li>在客户端，你调用的并不是“远端函数”，而是一个 <strong>代理函数（Stub）</strong>。</li>
+<li>代理函数帮你把参数打包成字节（序列化），通过网络送到服务端。</li>
+<li>服务端再解包（反序列化），调用真正的业务函数。</li>
+<li>结果再打包，传回客户端。</li>
+</ol>
+<p>整个流程用图表示大概是这样：</p>
+<p><img src="/images/grpc/rpc_call.png" alt></p>
+<hr>
+<h2 id="2-grpc-google出品高配版" tabindex="-1">2. gRPC: Google出品高配版</h2>
+<h3 id="21-grpc-的总体架构" tabindex="-1">2.1 gRPC 的总体架构</h3>
+<p>gRPC 本质上是一个 <strong>四层组合拳</strong>：</p>
+<ol>
+<li>
+<p><strong>接口定义层（IDL）</strong></p>
+<ul>
+<li>
+<p>用 <code>.proto</code> 文件定义服务、方法、参数、返回值。</p>
+</li>
+<li>
+<p>这是<strong>跨语言的契约</strong>，可以自动编译成不同语言的 Stub（代理代码）。</p>
+</li>
+</ul>
+</li>
+<li>
+<p><strong>序列化层（Protobuf）</strong></p>
+<ul>
+<li>
+<p>把对象（结构体）转成紧凑的二进制流（序列化），再传输。</p>
+</li>
+<li>
+<p>接收端再解包（反序列化）恢复成对象。</p>
+</li>
+</ul>
+</li>
+<li>
+<p><strong>传输层（HTTP/2）</strong></p>
+<ul>
+<li>
+<p>所有 RPC 调用都跑在一条 HTTP/2 连接上，支持多路复用。</p>
+</li>
+<li>
+<p>天生支持流式调用（单向、多向、双向）。</p>
+</li>
+</ul>
+</li>
+<li>
+<p><strong>运行时（gRPC Runtime）</strong></p>
+<ul>
+<li>
+<p>提供拦截器、负载均衡、认证、状态码模型、健康检查等“增强功能”。</p>
+</li>
+<li>
+<p>开发者只管写业务逻辑，剩下的交给 gRPC runtime 管。</p>
+</li>
+</ul>
+</li>
+</ol>
+<p>这里简单基于我自己的理解画一下gRPC的架构图：</p>
+<p><img src="/images/grpc/grpc_layers.png" alt></p>
+<h3 id="22-grpc-是如何一步步完成-rpc-调用的" tabindex="-1">2.2 gRPC 是如何一步步完成 RPC 调用的？</h3>
+<ol>
+<li>
+<p><strong>调用本地函数（看似）</strong></p>
+<ul>
+<li>
+<p>我们写的代码只是：<code>resp, err := client.Hello(ctx, req)</code></p>
+</li>
+<li>
+<p>实际上调用的是 Client Stub（代理）。</p>
+</li>
+</ul>
+</li>
+<li>
+<p><strong>序列化请求</strong></p>
+<ul>
+<li>
+<p>Stub 会帮我们把 <code>req</code> 转成 Protobuf 二进制。</p>
+</li>
+<li>
+<p>比如一个 <code>&#123;name:&quot;gopher&quot;&#125;</code> 会变成压缩过的字节流。</p>
+</li>
+</ul>
+</li>
+<li>
+<p><strong>通过 HTTP/2 发出去</strong></p>
+<ul>
+<li>
+<p>gRPC 在底层维护一条长连接。</p>
+</li>
+<li>
+<p>它会在 HTTP/2 里新建一个 stream，把请求包发过去。</p>
+</li>
+<li>
+<p>同时附带 metadata（比如 trace-id、token）。</p>
+</li>
+</ul>
+</li>
+<li>
+<p><strong>服务端解码 + 分发</strong></p>
+<ul>
+<li>
+<p>服务端 gRPC runtime 收到包，找到对应的 Server Stub。</p>
+</li>
+<li>
+<p>Server Stub 反序列化字节流，恢复成 <code>HelloRequest</code> 对象。</p>
+</li>
+<li>
+<p>然后调用服务端这边的业务函数 <code>Hello(ctx, req)</code>。</p>
+</li>
+</ul>
+</li>
+<li>
+<p><strong>执行函数并返回结果</strong></p>
+<ul>
+<li>
+<p>业务函数跑完，返回 <code>HelloReply</code>。</p>
+</li>
+<li>
+<p>Server Stub 序列化结果，写回 HTTP/2 stream。</p>
+</li>
+</ul>
+</li>
+<li>
+<p><strong>客户端解码并返回</strong></p>
+<ul>
+<li>
+<p>Client Stub 收到响应字节流，解码为 <code>HelloReply</code>。</p>
+</li>
+<li>
+<p>你的业务代码拿到结果，就像在调用本地函数一样。</p>
+</li>
+</ul>
+</li>
+</ol>
+<h2 id="3-grpc怎么用" tabindex="-1">3. gRPC怎么用？</h2>
+<p>在了解底层原理后，当然还得知道我们怎么在项目中去集成gRPC了</p>
+<p>我自己总结了个小口诀：</p>
+<blockquote>
+<p>订契约(proto)→ 生代码(stub)→ 写业务(handler)→ 起服务(server)/拨号(client)</p>
+</blockquote>
+<p>其实这就是我们需要掌握的全部东西了，接下来就走进其中再仔细看看。</p>
+<h3 id="31-订契约" tabindex="-1">3.1 订契约</h3>
+<p>我们需要去编写proto文件，定义好我们的服务、方法、参数、返回值等等。</p>
+<p>这里给出一个示例文件：</p>
+<figure class="highlight protobuf"><table><tr><td class="code"><pre><span class="line">syntax = <span class="string">&quot;proto3&quot;</span>;  </span><br><span class="line"><span class="comment">// 说明使用 proto3 语法，推荐现代项目都用 proto3。</span></span><br><span class="line"></span><br><span class="line"><span class="keyword">package</span> proto;  </span><br><span class="line"><span class="comment">// 定义 proto 包名</span></span><br><span class="line"><span class="comment">// proto 的命名空间：跨语言统一的逻辑名字，服务和消息的“姓氏”。</span></span><br><span class="line"></span><br><span class="line"><span class="keyword">option</span> go_package = <span class="string">&quot;example.com/your-proj;proto&quot;</span>;  </span><br><span class="line"><span class="comment">// Go 代码生成选项：指定生成的 go 包路径和包名。</span></span><br><span class="line"><span class="comment">// 前半部分是生成代码所在的路径，后半部分是包名（分号后的部分）。</span></span><br><span class="line"></span><br><span class="line"><span class="comment">// 定义一个服务（相当于接口），服务里可以有多个 RPC 方法。</span></span><br><span class="line"><span class="keyword">service </span><span class="title class_">Greeter</span> &#123;</span><br><span class="line">  <span class="comment">// 定义一个 RPC 方法：Hello</span></span><br><span class="line">  <span class="comment">// 参数类型是 HelloRequest，返回类型是 HelloReply</span></span><br><span class="line">  <span class="function"><span class="keyword">rpc</span> Hello(HelloRequest) <span class="keyword">returns</span> (HelloReply)</span>;</span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line"><span class="comment">// 定义请求消息类型</span></span><br><span class="line"><span class="keyword">message </span><span class="title class_">HelloRequest</span> &#123;</span><br><span class="line">  <span class="type">string</span> name = <span class="number">1</span>;  </span><br><span class="line">  <span class="comment">// 字段类型 string，字段名 name，字段编号 1。</span></span><br><span class="line">  <span class="comment">// 编号用于 Protobuf 的序列化，必须唯一且不能随意更改。</span></span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line"><span class="comment">// 定义响应消息类型</span></span><br><span class="line"><span class="keyword">message </span><span class="title class_">HelloReply</span> &#123;</span><br><span class="line">  <span class="type">string</span> message = <span class="number">1</span>;  </span><br><span class="line">  <span class="comment">// 字段类型 string，字段名 message，字段编号 1。</span></span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<p>在proto文件中，我觉得需要特别关注两个部分：</p>
+<ul>
+<li>
+<p><code>pakage</code></p>
+<ul>
+<li>
+<p>它是 <strong>Protobuf 的命名空间</strong>，用来区分不同 proto 文件里的服务和消息，避免重名冲突。</p>
+</li>
+<li>
+<p>它还会出现在 gRPC 方法的全限定名里，例如：</p>
+<figure class="highlight bash"><table><tr><td class="code"><pre><span class="line">/proto.Greeter/Hello</span><br></pre></td></tr></table></figure>
+<p>客户端和服务端就是通过这个全名来匹配的。</p>
+</li>
+</ul>
+</li>
+<li>
+<p><code>option go_package</code></p>
+<ul>
+<li>
+<p>它是 <strong>Go 语言生成代码的 import 路径和包名</strong>。</p>
+</li>
+<li>
+<p>格式：<code>&quot;路径;包名&quot;</code></p>
+<ul>
+<li>
+<p>前半部分（路径）：Go 代码的 import 路径(生成路径)。</p>
+</li>
+<li>
+<p>分号后（包名）：生成的 <code>.pb.go</code> 文件里的 <code>package</code> 声明。</p>
+</li>
+</ul>
+</li>
+<li>
+<p>当我们希望生成的代码和proto文件在同一目录下的话，可以直接设置：</p>
+<figure class="highlight protobuf"><table><tr><td class="code"><pre><span class="line"><span class="keyword">option</span> go_package = <span class="string">&quot;./;proto&quot;</span>;  </span><br><span class="line"><span class="comment">// 路径这里直接用&quot;./&quot;</span></span><br><span class="line"></span><br></pre></td></tr></table></figure>
+</li>
+</ul>
+</li>
+</ul>
+<h3 id="32-生代码" tabindex="-1">3.2 生代码</h3>
+<p>前面我们写好了 <code>.proto</code> 文件，这个文件就是契约（IDL）。但光有契约，Go 项目还没法直接用。
+这时候就需要借助 <strong>protoc</strong> 和 <strong>插件</strong>，把 <code>.proto</code> 翻译成我们在 Go 项目里能直接 import 的代码。</p>
+<h4 id="1安装必要工具" tabindex="-1">1.安装必要工具</h4>
+<p>gRPC 的代码生成需要 <strong>protoc</strong> 和两个插件：</p>
+<ul>
+<li>
+<p><strong>protoc</strong>：Protobuf 的编译器</p>
+</li>
+<li>
+<p><strong>protoc-gen-go</strong>：生成普通的 Go 结构体（message）</p>
+</li>
+<li>
+<p><strong>protoc-gen-go-grpc</strong>：生成 gRPC 专用的客户端、服务端接口（service）</p>
+</li>
+</ul>
+<p>安装命令如下：</p>
+<figure class="highlight bash"><table><tr><td class="code"><pre><span class="line"><span class="comment"># 安装生成普通 Go 结构体的插件</span></span><br><span class="line">go install google.golang.org/protobuf/cmd/protoc-gen-go@latest</span><br><span class="line"></span><br><span class="line"><span class="comment"># 安装生成 gRPC 相关代码的插件</span></span><br><span class="line">go install google.golang.org/grpc/cmd/protoc-gen-go-grpc@latest</span><br></pre></td></tr></table></figure>
+<p>验证：</p>
+<figure class="highlight bash"><table><tr><td class="code"><pre><span class="line">protoc --version</span><br><span class="line">protoc-gen-go --version</span><br><span class="line">protoc-gen-go-grpc --version</span><br></pre></td></tr></table></figure>
+<h4 id="2生成代码" tabindex="-1">2.生成代码</h4>
+<p>一般我们会将生成的代码和proto文件放在同一目录下</p>
+<p>生成命令如下：</p>
+<figure class="highlight bash"><table><tr><td class="code"><pre><span class="line">protoc -I . \</span><br><span class="line">  --go_out=. --go_opt=paths=source_relative \</span><br><span class="line">  --go-grpc_out=. --go-grpc_opt=paths=source_relative \</span><br><span class="line">  proto/greeter.proto</span><br></pre></td></tr></table></figure>
+<p>解释一下：</p>
+<ul>
+<li>
+<p><code>-I .</code> → 指定 proto 文件的根目录</p>
+<ul>
+<li>
+<p>它告诉 <code>protoc</code> 去哪里找 <code>.proto</code> 文件。</p>
+</li>
+<li>
+<p>当你在一个 proto 文件里用 <code>import &quot;xxx.proto&quot;;</code> 的时候，<code>protoc</code> 就会从 <code>-I</code> 指定的路径里去查找。</p>
+</li>
+<li>
+<p>使用&quot;.&quot;就是以当前目录作为 proto 的根目录。</p>
+</li>
+</ul>
+</li>
+<li>
+<p><code>--go_out=.</code> → 把 message 相关的 Go 代码生成到当前目录</p>
+</li>
+<li>
+<p><code>--go-grpc_out=.</code> → 把 gRPC 相关的 Go 代码生成到当前目录</p>
+</li>
+<li>
+<p><code>--go_opt=paths=source_relative</code> → 保证生成的 <code>.pb.go</code> 和 <code>.proto</code> 在同一目录，方便管理</p>
+</li>
+<li>
+<p>最后是 proto 文件路径</p>
+</li>
+</ul>
+<h3 id="33-写业务起服务拨号" tabindex="-1">3.3 写业务+起服务/拨号</h3>
+<h5 id="331-如果项目要作为-grpc-服务端" tabindex="-1">3.3.1 如果项目要作为 <strong>gRPC 服务端</strong></h5>
+<blockquote>
+<p>实现 <code>GreeterServer</code> → 注册到 <code>grpc.Server</code></p>
+</blockquote>
+<p><strong>a) 写 Handler（只管业务）：</strong></p>
+<figure class="highlight go"><table><tr><td class="code"><pre><span class="line"><span class="comment">// internal/server/greeter.go</span></span><br><span class="line"><span class="keyword">package</span> server</span><br><span class="line"></span><br><span class="line"><span class="keyword">import</span> (</span><br><span class="line">  <span class="string">&quot;context&quot;</span></span><br><span class="line">  <span class="string">&quot;example.com/your-proj/proto&quot;</span></span><br><span class="line">)</span><br><span class="line"></span><br><span class="line"><span class="keyword">type</span> GreeterService <span class="keyword">struct</span> &#123;</span><br><span class="line">  proto.UnimplementedGreeterServer</span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="keyword">func</span> <span class="params">(s *GreeterService)</span></span> Hello(ctx context.Context, in *greeterv1.HelloRequest) (*greeterv1.HelloReply, <span class="type">error</span>) &#123;</span><br><span class="line">  <span class="keyword">return</span> &amp;greeterv1.HelloReply&#123;Message: <span class="string">&quot;Hello, &quot;</span> + in.GetName()&#125;, <span class="literal">nil</span></span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line"></span><br></pre></td></tr></table></figure>
+<p><strong>b) 起 gRPC Server：</strong></p>
+<figure class="highlight go"><table><tr><td class="code"><pre><span class="line"><span class="comment">// cmd/greeter-server/main.go</span></span><br><span class="line"><span class="keyword">package</span> main</span><br><span class="line"></span><br><span class="line"><span class="keyword">import</span> (</span><br><span class="line">  <span class="string">&quot;log&quot;</span></span><br><span class="line">  <span class="string">&quot;net&quot;</span></span><br><span class="line">  <span class="string">&quot;os&quot;</span></span><br><span class="line">  <span class="string">&quot;os/signal&quot;</span></span><br><span class="line">  <span class="string">&quot;syscall&quot;</span></span><br><span class="line">  <span class="string">&quot;time&quot;</span></span><br><span class="line"></span><br><span class="line">  <span class="string">&quot;example.com/your-proj/proto&quot;</span></span><br><span class="line">  <span class="string">&quot;example.com/your-proj/internal/server&quot;</span></span><br><span class="line"></span><br><span class="line">  <span class="string">&quot;google.golang.org/grpc&quot;</span></span><br><span class="line">  <span class="string">&quot;google.golang.org/grpc/health&quot;</span></span><br><span class="line">  healthpb <span class="string">&quot;google.golang.org/grpc/health/grpc_health_v1&quot;</span></span><br><span class="line">  <span class="string">&quot;google.golang.org/grpc/reflection&quot;</span></span><br><span class="line">)</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="keyword">func</span> <span class="title">main</span><span class="params">()</span></span> &#123;</span><br><span class="line">  lis, err := net.Listen(<span class="string">&quot;tcp&quot;</span>, <span class="string">&quot;:50051&quot;</span>)</span><br><span class="line">  <span class="keyword">if</span> err != <span class="literal">nil</span> &#123; log.Fatal(err) &#125;</span><br><span class="line"></span><br><span class="line">  <span class="comment">// 可串联拦截器：日志、recover、鉴权、指标等</span></span><br><span class="line">  s := grpc.NewServer()</span><br><span class="line"></span><br><span class="line">  proto.RegisterGreeterServer(s, &amp;server.GreeterService&#123;&#125;)</span><br><span class="line"></span><br><span class="line">  <span class="keyword">go</span> <span class="function"><span class="keyword">func</span><span class="params">()</span></span> &#123;</span><br><span class="line">    log.Println(<span class="string">&quot;gRPC listening on :50051&quot;</span>)</span><br><span class="line">    <span class="keyword">if</span> err := s.Serve(lis); err != <span class="literal">nil</span> &#123;</span><br><span class="line">      log.Println(<span class="string">&quot;grpc serve error:&quot;</span>, err)</span><br><span class="line">    &#125;</span><br><span class="line">  &#125;()</span><br><span class="line"></span><br><span class="line">  <span class="comment">// 优雅退出</span></span><br><span class="line">  quit := <span class="built_in">make</span>(<span class="keyword">chan</span> os.Signal, <span class="number">1</span>)</span><br><span class="line">  signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)</span><br><span class="line">  &lt;-quit</span><br><span class="line">  log.Println(<span class="string">&quot;shutting down...&quot;</span>)</span><br><span class="line">  <span class="comment">// 给在途请求一点时间</span></span><br><span class="line">  done := <span class="built_in">make</span>(<span class="keyword">chan</span> <span class="keyword">struct</span>&#123;&#125;)</span><br><span class="line">  <span class="keyword">go</span> <span class="function"><span class="keyword">func</span><span class="params">()</span></span> &#123; s.GracefulStop(); <span class="built_in">close</span>(done) &#125;()</span><br><span class="line">  <span class="keyword">select</span> &#123;</span><br><span class="line">  <span class="keyword">case</span> &lt;-done:</span><br><span class="line">  <span class="keyword">case</span> &lt;-time.After(<span class="number">5</span> * time.Second):</span><br><span class="line">    s.Stop()</span><br><span class="line">  &#125;</span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line"></span><br></pre></td></tr></table></figure>
+<h5 id="332-如果项目要作为-grpc-客户端" tabindex="-1">3.3.2 如果项目要作为 <strong>gRPC 客户端</strong></h5>
+<blockquote>
+<p><code>grpc.Dial</code>获得连接conn→ <code>NewGreeterClient(conn)</code>获得client→ 通过<code>client</code>调用所需函数</p>
+</blockquote>
+<p><strong>a) 拨号（Dial）拿连接 &amp; Stub：</strong></p>
+<figure class="highlight go"><table><tr><td class="code"><pre><span class="line"><span class="comment">// cmd/greeter-client/main.go</span></span><br><span class="line"><span class="keyword">package</span> main</span><br><span class="line"></span><br><span class="line"><span class="keyword">import</span> (</span><br><span class="line">  <span class="string">&quot;context&quot;</span></span><br><span class="line">  <span class="string">&quot;log&quot;</span></span><br><span class="line">  <span class="string">&quot;time&quot;</span></span><br><span class="line"></span><br><span class="line">  <span class="string">&quot;example.com/your-proj/proto&quot;</span></span><br><span class="line">  <span class="string">&quot;google.golang.org/grpc&quot;</span></span><br><span class="line">  <span class="string">&quot;google.golang.org/grpc/credentials/insecure&quot;</span></span><br><span class="line">)</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="keyword">func</span> <span class="title">main</span><span class="params">()</span></span> &#123;</span><br><span class="line">  <span class="comment">// Demo 用明文；生产请使用 TLS</span></span><br><span class="line">  conn, err := grpc.Dial(</span><br><span class="line">    <span class="string">&quot;localhost:50051&quot;</span>,</span><br><span class="line">    grpc.WithTransportCredentials(insecure.NewCredentials()),</span><br><span class="line">    <span class="comment">// 可选：默认服务配置（统一超时/重试/LB）</span></span><br><span class="line">    grpc.WithDefaultServiceConfig(<span class="string">`&#123;</span></span><br><span class="line"><span class="string">      &quot;methodConfig&quot;: [&#123;</span></span><br><span class="line"><span class="string">        &quot;name&quot;: [&#123;&quot;service&quot;:&quot;greeter.v1.Greeter&quot;&#125;],</span></span><br><span class="line"><span class="string">        &quot;timeout&quot;:&quot;2s&quot;,</span></span><br><span class="line"><span class="string">        &quot;retryPolicy&quot;:&#123;</span></span><br><span class="line"><span class="string">          &quot;MaxAttempts&quot;:3,</span></span><br><span class="line"><span class="string">          &quot;InitialBackoff&quot;:&quot;0.2s&quot;,</span></span><br><span class="line"><span class="string">          &quot;MaxBackoff&quot;:&quot;1s&quot;,</span></span><br><span class="line"><span class="string">          &quot;BackoffMultiplier&quot;:2.0,</span></span><br><span class="line"><span class="string">          &quot;RetryableStatusCodes&quot;:[&quot;UNAVAILABLE&quot;,&quot;DEADLINE_EXCEEDED&quot;]</span></span><br><span class="line"><span class="string">        &#125;</span></span><br><span class="line"><span class="string">      &#125;]</span></span><br><span class="line"><span class="string">    &#125;`</span>),</span><br><span class="line">  )</span><br><span class="line">  <span class="keyword">if</span> err != <span class="literal">nil</span> &#123; log.Fatal(err) &#125;</span><br><span class="line">  <span class="keyword">defer</span> conn.Close()</span><br><span class="line"></span><br><span class="line">  cli := proto.NewGreeterClient(conn)</span><br><span class="line"></span><br><span class="line">  <span class="comment">// 接下来就可以使用cli去调用所需的方法了</span></span><br><span class="line">  ctx, cancel := context.WithTimeout(context.Background(), <span class="number">2</span>*time.Second)</span><br><span class="line"><span class="keyword">defer</span> cancel()</span><br><span class="line"></span><br><span class="line">  resp, err := cli.Hello(ctx, &amp;proto.HelloRequest&#123;Name: <span class="string">&quot;gopher&quot;</span>&#125;)</span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line"></span><br></pre></td></tr></table></figure>
+
+  </div>
+</article>
+
+
+
+        
+          <div id="footer-post-container">
+  <div id="footer-post">
+
+    <div id="nav-footer" style="display: none">
+      <ul>
+        
+          <li><a href="/">首页</a></li>
+        
+          <li><a href="/about/">关于</a></li>
+        
+          <li><a href="/archives/">文章</a></li>
+        
+          <li><a target="_blank" rel="noopener" href="https://github.com/0xccio">项目</a></li>
+        
+      </ul>
+    </div>
+
+    
+    
+      <div id="toc-footer" style="display: none">
+        <ol class="toc"><li class="toc-item toc-level-2"><a class="toc-link" href="#1-rpc-%E7%9A%84%E6%9C%AC%E8%B4%A8%E6%98%AF%E4%BB%80%E4%B9%88"><span class="toc-number">1.</span> <span class="toc-text">1. RPC 的本质是什么？</span></a></li><li class="toc-item toc-level-2"><a class="toc-link" href="#2-grpc-google%E5%87%BA%E5%93%81%E9%AB%98%E9%85%8D%E7%89%88"><span class="toc-number">2.</span> <span class="toc-text">2. gRPC: Google出品高配版</span></a><ol class="toc-child"><li class="toc-item toc-level-3"><a class="toc-link" href="#21-grpc-%E7%9A%84%E6%80%BB%E4%BD%93%E6%9E%B6%E6%9E%84"><span class="toc-number">2.1.</span> <span class="toc-text">2.1 gRPC 的总体架构</span></a></li><li class="toc-item toc-level-3"><a class="toc-link" href="#22-grpc-%E6%98%AF%E5%A6%82%E4%BD%95%E4%B8%80%E6%AD%A5%E6%AD%A5%E5%AE%8C%E6%88%90-rpc-%E8%B0%83%E7%94%A8%E7%9A%84"><span class="toc-number">2.2.</span> <span class="toc-text">2.2 gRPC 是如何一步步完成 RPC 调用的？</span></a></li></ol></li><li class="toc-item toc-level-2"><a class="toc-link" href="#3-grpc%E6%80%8E%E4%B9%88%E7%94%A8"><span class="toc-number">3.</span> <span class="toc-text">3. gRPC怎么用？</span></a><ol class="toc-child"><li class="toc-item toc-level-3"><a class="toc-link" href="#31-%E8%AE%A2%E5%A5%91%E7%BA%A6"><span class="toc-number">3.1.</span> <span class="toc-text">3.1 订契约</span></a></li><li class="toc-item toc-level-3"><a class="toc-link" href="#32-%E7%94%9F%E4%BB%A3%E7%A0%81"><span class="toc-number">3.2.</span> <span class="toc-text">3.2 生代码</span></a><ol class="toc-child"><li class="toc-item toc-level-4"><a class="toc-link" href="#1%E5%AE%89%E8%A3%85%E5%BF%85%E8%A6%81%E5%B7%A5%E5%85%B7"><span class="toc-number">3.2.1.</span> <span class="toc-text">1.安装必要工具</span></a></li><li class="toc-item toc-level-4"><a class="toc-link" href="#2%E7%94%9F%E6%88%90%E4%BB%A3%E7%A0%81"><span class="toc-number">3.2.2.</span> <span class="toc-text">2.生成代码</span></a></li></ol></li><li class="toc-item toc-level-3"><a class="toc-link" href="#33-%E5%86%99%E4%B8%9A%E5%8A%A1%E8%B5%B7%E6%9C%8D%E5%8A%A1%E6%8B%A8%E5%8F%B7"><span class="toc-number">3.3.</span> <span class="toc-text">3.3 写业务+起服务&#x2F;拨号</span></a><ol class="toc-child"><li class="toc-item toc-level-5"><a class="toc-link" href="#331-%E5%A6%82%E6%9E%9C%E9%A1%B9%E7%9B%AE%E8%A6%81%E4%BD%9C%E4%B8%BA-grpc-%E6%9C%8D%E5%8A%A1%E7%AB%AF"><span class="toc-number">3.3.0.1.</span> <span class="toc-text">3.3.1 如果项目要作为 gRPC 服务端</span></a></li><li class="toc-item toc-level-5"><a class="toc-link" href="#332-%E5%A6%82%E6%9E%9C%E9%A1%B9%E7%9B%AE%E8%A6%81%E4%BD%9C%E4%B8%BA-grpc-%E5%AE%A2%E6%88%B7%E7%AB%AF"><span class="toc-number">3.3.0.2.</span> <span class="toc-text">3.3.2 如果项目要作为 gRPC 客户端</span></a></li></ol></li></ol></li></ol></li></ol>
+      </div>
+    
+
+    <div id="share-footer" style="display: none">
+      <ul>
+  <li><a class="icon" target="_blank" rel="noopener" href="http://www.facebook.com/sharer.php?u=https://0xccio.github.io/2025/09/21/%E8%BF%9C%E7%A8%8B%E8%B0%83%E7%94%A8%E6%B2%A1%E9%82%A3%E4%B9%88%E9%9A%BE%EF%BC%9A%E6%B7%B1%E5%85%A5%E6%B5%85%E5%87%BAgRPC/"><i class="fab fa-facebook fa-lg" aria-hidden="true"></i></a></li>
+  <li><a class="icon" target="_blank" rel="noopener" href="https://twitter.com/share?url=https://0xccio.github.io/2025/09/21/%E8%BF%9C%E7%A8%8B%E8%B0%83%E7%94%A8%E6%B2%A1%E9%82%A3%E4%B9%88%E9%9A%BE%EF%BC%9A%E6%B7%B1%E5%85%A5%E6%B5%85%E5%87%BAgRPC/&text=远程调用没那么难：深入浅出gRPC"><i class="fab fa-twitter fa-lg" aria-hidden="true"></i></a></li>
+  <li><a class="icon" target="_blank" rel="noopener" href="http://www.linkedin.com/shareArticle?url=https://0xccio.github.io/2025/09/21/%E8%BF%9C%E7%A8%8B%E8%B0%83%E7%94%A8%E6%B2%A1%E9%82%A3%E4%B9%88%E9%9A%BE%EF%BC%9A%E6%B7%B1%E5%85%A5%E6%B5%85%E5%87%BAgRPC/&title=远程调用没那么难：深入浅出gRPC"><i class="fab fa-linkedin fa-lg" aria-hidden="true"></i></a></li>
+  <li><a class="icon" target="_blank" rel="noopener" href="https://pinterest.com/pin/create/bookmarklet/?url=https://0xccio.github.io/2025/09/21/%E8%BF%9C%E7%A8%8B%E8%B0%83%E7%94%A8%E6%B2%A1%E9%82%A3%E4%B9%88%E9%9A%BE%EF%BC%9A%E6%B7%B1%E5%85%A5%E6%B5%85%E5%87%BAgRPC/&is_video=false&description=远程调用没那么难：深入浅出gRPC"><i class="fab fa-pinterest fa-lg" aria-hidden="true"></i></a></li>
+  <li><a class="icon" href="mailto:?subject=远程调用没那么难：深入浅出gRPC&body=Check out this article: https://0xccio.github.io/2025/09/21/%E8%BF%9C%E7%A8%8B%E8%B0%83%E7%94%A8%E6%B2%A1%E9%82%A3%E4%B9%88%E9%9A%BE%EF%BC%9A%E6%B7%B1%E5%85%A5%E6%B5%85%E5%87%BAgRPC/"><i class="fa-solid fa-envelope fa-lg" aria-hidden="true"></i></a></li>
+  <li><a class="icon" target="_blank" rel="noopener" href="https://getpocket.com/save?url=https://0xccio.github.io/2025/09/21/%E8%BF%9C%E7%A8%8B%E8%B0%83%E7%94%A8%E6%B2%A1%E9%82%A3%E4%B9%88%E9%9A%BE%EF%BC%9A%E6%B7%B1%E5%85%A5%E6%B5%85%E5%87%BAgRPC/&title=远程调用没那么难：深入浅出gRPC"><i class="fab fa-get-pocket fa-lg" aria-hidden="true"></i></a></li>
+  <li><a class="icon" target="_blank" rel="noopener" href="http://reddit.com/submit?url=https://0xccio.github.io/2025/09/21/%E8%BF%9C%E7%A8%8B%E8%B0%83%E7%94%A8%E6%B2%A1%E9%82%A3%E4%B9%88%E9%9A%BE%EF%BC%9A%E6%B7%B1%E5%85%A5%E6%B5%85%E5%87%BAgRPC/&title=远程调用没那么难：深入浅出gRPC"><i class="fab fa-reddit fa-lg" aria-hidden="true"></i></a></li>
+  <li><a class="icon" target="_blank" rel="noopener" href="http://www.stumbleupon.com/submit?url=https://0xccio.github.io/2025/09/21/%E8%BF%9C%E7%A8%8B%E8%B0%83%E7%94%A8%E6%B2%A1%E9%82%A3%E4%B9%88%E9%9A%BE%EF%BC%9A%E6%B7%B1%E5%85%A5%E6%B5%85%E5%87%BAgRPC/&title=远程调用没那么难：深入浅出gRPC"><i class="fab fa-stumbleupon fa-lg" aria-hidden="true"></i></a></li>
+  <li><a class="icon" target="_blank" rel="noopener" href="http://digg.com/submit?url=https://0xccio.github.io/2025/09/21/%E8%BF%9C%E7%A8%8B%E8%B0%83%E7%94%A8%E6%B2%A1%E9%82%A3%E4%B9%88%E9%9A%BE%EF%BC%9A%E6%B7%B1%E5%85%A5%E6%B5%85%E5%87%BAgRPC/&title=远程调用没那么难：深入浅出gRPC"><i class="fab fa-digg fa-lg" aria-hidden="true"></i></a></li>
+  <li><a class="icon" target="_blank" rel="noopener" href="http://www.tumblr.com/share/link?url=https://0xccio.github.io/2025/09/21/%E8%BF%9C%E7%A8%8B%E8%B0%83%E7%94%A8%E6%B2%A1%E9%82%A3%E4%B9%88%E9%9A%BE%EF%BC%9A%E6%B7%B1%E5%85%A5%E6%B5%85%E5%87%BAgRPC/&name=远程调用没那么难：深入浅出gRPC&description="><i class="fab fa-tumblr fa-lg" aria-hidden="true"></i></a></li>
+  <li><a class="icon" target="_blank" rel="noopener" href="https://news.ycombinator.com/submitlink?u=https://0xccio.github.io/2025/09/21/%E8%BF%9C%E7%A8%8B%E8%B0%83%E7%94%A8%E6%B2%A1%E9%82%A3%E4%B9%88%E9%9A%BE%EF%BC%9A%E6%B7%B1%E5%85%A5%E6%B5%85%E5%87%BAgRPC/&t=远程调用没那么难：深入浅出gRPC"><i class="fab fa-hacker-news fa-lg" aria-hidden="true"></i></a></li>
+</ul>
+
+    </div>
+
+    <div id="actions-footer">
+        <a id="menu" class="icon" href="#" onclick="$('#nav-footer').toggle();return false;"><i class="fa-solid fa-bars fa-lg" aria-hidden="true"></i> 菜单</a>
+        
+          <a id="toc" class="icon" href="#" onclick="$('#toc-footer').toggle();return false;"><i class="fa-solid fa-list fa-lg" aria-hidden="true"></i> 目录</a>
+        
+        <a id="share" class="icon" href="#" onclick="$('#share-footer').toggle();return false;"><i class="fa-solid fa-share-alt fa-lg" aria-hidden="true"></i> 分享</a>
+        <a id="top" style="display:none" class="icon" href="#" onclick="$('html, body').animate({ scrollTop: 0 }, 'fast');"><i class="fa-solid fa-chevron-up fa-lg" aria-hidden="true"></i> 返回顶部</a>
+    </div>
+
+  </div>
+</div>
+
+        
+        <footer id="footer">
+  <div class="footer-left">
+    Copyright &copy;
+    
+    
+    2016-2025
+    0xccio
+  </div>
+  <div class="footer-right">
+    <nav>
+      <ul>
+        <!--
+       --><li><a href="/">首页</a></li><!--
+     --><!--
+       --><li><a href="/about/">关于</a></li><!--
+     --><!--
+       --><li><a href="/archives/">文章</a></li><!--
+     --><!--
+       --><li><a target="_blank" rel="noopener" href="https://github.com/0xccio">项目</a></li><!--
+     -->
+      </ul>
+    </nav>
+  </div>
+</footer>
+
+    </div>
+    <!-- styles -->
+
+
+
+  <link rel="preload" as="style" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" crossorigin="anonymous" onload="this.onload=null;this.rel='stylesheet'"/>
+
+
+    <!-- jquery -->
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jquery/3.6.0/jquery.min.js" crossorigin="anonymous"></script>
+
+
+
+
+<!-- clipboard -->
+
+  
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/clipboard.js/2.0.7/clipboard.min.js" crossorigin="anonymous"></script>
+  
+  <script type="text/javascript">
+  $(function() {
+    // copy-btn HTML
+    var btn = "<span class=\"btn-copy tooltipped tooltipped-sw\" aria-label=\"复制到粘贴板！\">";
+    btn += '<i class="fa-regular fa-clone"></i>';
+    btn += '</span>';
+    // mount it!
+    $(".highlight table").before(btn);
+    var clip = new ClipboardJS('.btn-copy', {
+      text: function(trigger) {
+        return Array.from(trigger.nextElementSibling.querySelectorAll('.code')).reduce((str,it)=>str+it.innerText+'\n','')
+      }
+    });
+    clip.on('success', function(e) {
+      e.trigger.setAttribute('aria-label', "复制成功！");
+      e.clearSelection();
+    })
+  })
+  </script>
+
+
+<script src="/js/main.js"></script>
+
+<!-- search -->
+
+<!-- Baidu Analytics -->
+
+<!-- Cloudflare Analytics -->
+
+<!-- Disqus Comments -->
+
+<!-- utterances Comments -->
+
+</body>
+</html>
